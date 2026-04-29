@@ -1,57 +1,147 @@
-# Project Name
+# Azure Sandboxes
 
-(short, 1-3 sentenced, description of the project)
+Azure Container Apps Sandboxes is a first-class resource type in Azure Container Apps that provides fast, secure, ephemeral compute environments with built-in suspend and resume capabilities. Sandboxes join the Container Apps family alongside Apps, Jobs, and Dynamic Sessions as a foundational building block for the next generation of cloud workloads.
 
-## Features
+## What Are ACA Sandboxes?
 
-This project framework provides the following features:
+A Sandbox is a secure, isolated compute environment that can be created, used, suspended, and resumed on demand. Sandboxes are organized under **Sandbox Groups** (`Microsoft.App/SandboxGroups`), which let you manage collections of sandboxes with shared configuration.
 
-* Feature 1
-* Feature 2
-* ...
+**Key capabilities:**
 
-## Getting Started
+- **Sub-second startup** — provisioned from prewarmed pools for near-instant availability
+- **Strong isolation** — each sandbox runs in its own secure boundary, enterprise-grade security for untrusted code
+- **Scale to zero** — pay nothing when idle, resources consumed only while actively running
+- **Massive scale-out** — burst to thousands of concurrent sandboxes without manual intervention
+- **OCI container images** — bring your own container image with your preferred runtime and tools
+- **Snapshots** — suspend a sandbox capturing full memory and disk state, resume later in sub-second time
 
-### Prerequisites
+## Use Cases
 
-(ideally very short, if any)
+| Scenario | How Sandboxes Help |
+|----------|-------------------|
+| AI code execution | Safely run LLM-generated code in isolated environments with instant startup |
+| Development environments | On-demand, suspendable dev environments that preserve state across sessions |
+| SaaS platforms | Isolated, per-tenant environments that start instantly and suspend when idle |
+| Agent workflows | Persistent, isolated workspaces for AI agents that survive across task boundaries |
+| CI/CD pipelines | Ephemeral build and test environments that scale to zero when idle |
+| Burst workloads | Scale from zero to thousands of sandboxes in response to demand |
 
-- OS
-- Library version
-- ...
+## This Repository
 
-### Installation
+This repo contains developer tools, plugins, and tutorials for ACA Sandboxes:
 
-(ideally very short)
+- **Plugin Store** — Copilot CLI and Claude Code plugins with the `azure-sandbox` skill
+- **Labs** — Hands-on Jupyter notebook tutorials
+- **Release artifacts** — Python SDK and CLI extension wheels published through GitHub Releases
 
-- npm install [package name]
-- mvn install
-- ...
+## Install
 
-### Quickstart
-(Add steps to get up and running quickly)
+### Plugin (Copilot CLI / Claude Code)
 
-1. git clone [repository clone url]
-2. cd [repository name]
-3. ...
+```bash
+# Copilot CLI — add the marketplace, then install the sandbox skill
+/plugin marketplace add Azure-Samples/azure-container-apps-sandboxes
+/plugin install azure-sandbox@Azure-Container-Apps
 
+# Claude Code
+claude plugin add Azure-Samples/azure-container-apps-sandboxes
+```
 
-## Demo
+### Python SDK
 
-A demo app is included to show how to use the project.
+```bash
+# From GitHub Release
+gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_sandbox-*.whl" --dir /tmp
+gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_mgmt_sandbox-*.whl" --dir /tmp
+pip install /tmp/azure_sandbox-*.whl /tmp/azure_mgmt_sandbox-*.whl
+```
 
-To run the demo, follow these steps:
+### az CLI Extension
 
-(Add steps to start up the demo)
+```bash
+# From GitHub Release
+gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "az_cli_sandbox-*.whl" --dir /tmp
+az extension add --source /tmp/az_cli_sandbox-*.whl
+```
 
-1.
-2.
-3.
+### Uninstall
 
-## Resources
+```bash
+az extension remove --name sandbox
+pip uninstall azure-sandbox azure-mgmt-sandbox
+```
 
-(Any additional resources or related projects)
+## SDK Usage
 
-- Link to supporting information
-- Link to similar sample
-- ...
+```python
+from azure.sandbox import SandboxClient
+from azure.mgmt.sandbox import SandboxGroupManagementClient
+
+client = SandboxClient(resource_group="my-rg")
+mgmt = SandboxGroupManagementClient(resource_group="my-rg")
+```
+
+Use `mgmt` for sandbox group operations (create/delete groups) and `client` for sandbox operations (create, exec, files, ports, snapshots, etc.). For end-to-end examples, see the notebooks in [`labs/`](labs/).
+
+## Skills
+
+| Skill | Description |
+|-------|-------------|
+| [azure-sandbox](plugin/skills/azure-sandbox/SKILL.md) | Manage sandbox groups and sandboxes — create, exec, SSH, files, ports, egress, images, snapshots, stop/resume |
+
+## Labs
+
+| Lab | Notebook | What You Learn |
+|-----|----------|----------------|
+| Getting Started | [01-getting-started.ipynb](labs/01-sandbox-getting-started/01-getting-started.ipynb) | Full lifecycle: group → sandbox → exec → files → port → snapshot → stop → resume → cleanup |
+| Deploy Web App | [02-deploy-web-app.ipynb](labs/01-sandbox-getting-started/02-deploy-web-app.ipynb) | Upload code, start server, expose port, test public URL |
+| Copilot CLI (BYOK) | [03-copilot-cli.ipynb](labs/01-sandbox-getting-started/03-copilot-cli.ipynb) | BYOK Azure OpenAI, zero-trust egress, offline mode, SSH |
+
+## Portal
+
+Manage sandboxes visually at [containerapps.azure.com](https://containerapps.azure.com/sandbox-groups):
+
+- [Browse Sandbox Groups](https://containerapps.azure.com/sandbox-groups)
+- [Create Sandbox Group](https://containerapps.azure.com/sandbox-groups/create)
+
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for general guidance.
+
+### Adding a Skill
+
+Skills live in `plugin/skills/<skill-name>/` and include:
+
+- `SKILL.md` — Skill description, install instructions, usage examples, and references
+- `scripts/` — Runnable Python scripts that demonstrate the skill end-to-end
+- `references/` — Supplementary docs (prerequisites, patterns, setup guides)
+- `assets/` — Helper files (e.g., SSH client)
+
+To add a new skill, create a directory under `plugin/skills/`, add a `SKILL.md` with install/usage instructions, and register it in [`marketplace.json`](marketplace.json).
+
+### Adding a Lab
+
+Labs live in `labs/<topic>/` as Jupyter notebooks (`.ipynb`). Each lab should:
+
+- Be self-contained — runnable with just `az login` and the SDK installed
+- Include setup, step-by-step walkthrough, and cleanup cells
+- Use `SandboxClient` and `SandboxGroupManagementClient` from the current SDK
+
+To add a new lab, create a directory under `labs/`, add your notebooks, and update [`labs/README.md`](labs/README.md).
+
+## Release
+
+Release upload workflow: [`scripts/release.sh`](scripts/release.sh)
+
+```bash
+./scripts/release.sh v0.1.0b1 /path/to/dist
+```
+
+## Links
+
+- [Portal](https://containerapps.azure.com/sandbox-groups)
+- [Pricing](https://azure.microsoft.com/pricing/details/container-apps/)
+
+## License
+
+[MIT](LICENSE.md)
