@@ -17,7 +17,9 @@ az extension add --source /tmp/az_cli_sandbox-*-py3-none-any.whl
 
 # Or from cloned repo
 git clone https://github.com/Azure-Samples/azure-container-apps-sandboxes.git
-cd Sandboxes && bash scripts/setup.sh
+cd azure-container-apps-sandboxes
+gh release download --pattern "az_cli_sandbox-*-py3-none-any.whl" --dir /tmp
+az extension add --source /tmp/az_cli_sandbox-*-py3-none-any.whl
 ```
 
 ## Azure Setup (one-time)

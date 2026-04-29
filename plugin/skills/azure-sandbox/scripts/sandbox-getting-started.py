@@ -1,8 +1,8 @@
 """Getting Started with Sandboxes.
 
 Usage:
-    python 01-getting-started.py -g <resource-group> -s <sandbox-group> -l <location>
-    python 01-getting-started.py  # uses defaults
+    python sandbox-getting-started.py -g <resource-group> -s <sandbox-group> -l <location>
+    python sandbox-getting-started.py  # uses defaults
 """
 
 import argparse
@@ -18,7 +18,7 @@ args = parser.parse_args()
 
 account = json.loads(subprocess.run(
     ["az", "account", "show", "-o", "json"],
-    capture_output=True, text=True, shell=True).stdout)
+    capture_output=True, text=True, check=True).stdout)
 
 subscription_id = account["id"]
 rg = args.resource_group or "sandbox-lab-rg"
@@ -38,7 +38,7 @@ mgmt = SandboxGroupManagementClient(subscription_id=subscription_id, resource_gr
 
 # 1. Create resources
 print("\n1. Creating resource group + sandbox group...")
-subprocess.run(["az", "group", "create", "--name", rg, "--location", location, "-o", "none"], shell=True)
+subprocess.run(["az", "group", "create", "--name", rg, "--location", location, "-o", "none"], check=True)
 group = mgmt.create_group(sg, location=location)
 print(f"   Group: {group['name']}")
 
@@ -89,7 +89,7 @@ client.delete_sandbox(sandbox_id, sg)
 print("   Deleted sandbox")
 mgmt.delete_group(sg)
 print("   Deleted group")
-subprocess.run(["az", "group", "delete", "--name", rg, "--yes", "--no-wait"], shell=True)
+subprocess.run(["az", "group", "delete", "--name", rg, "--yes", "--no-wait"], check=True)
 print("   Deleting resource group (async)")
 
 print("\nDone!")

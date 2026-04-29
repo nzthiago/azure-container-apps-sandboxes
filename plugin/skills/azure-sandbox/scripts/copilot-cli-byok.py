@@ -8,16 +8,17 @@ For zero-trust: pass the API key via egress transform rules instead of
 directly, so the key never enters the sandbox.
 
 Usage:
-    python 03-copilot-cli.py --aoai-endpoint <url> --aoai-key <key> --model <name>
-    python 03-copilot-cli.py --aoai-endpoint <url> --aoai-key <key> --model <name> --prompt "go yolo"
-    python 03-copilot-cli.py --aoai-endpoint <url> --aoai-key <key> --model <name> --zero-trust
+    python copilot-cli-byok.py --aoai-endpoint <url> --aoai-key <key> --model <name>
+    python copilot-cli-byok.py --aoai-endpoint <url> --aoai-key <key> --model <name> --prompt "go yolo"
+    python copilot-cli-byok.py --aoai-endpoint <url> --aoai-key <key> --model <name> --zero-trust
 """
 
 import argparse
 import json
+import shlex
 import subprocess
 
-parser = argparse.ArgumentParser(description="Copilot CLI in Sandbox (BYOK)")
+parser= argparse.ArgumentParser(description="Copilot CLI in Sandbox (BYOK)")
 parser.add_argument("--aoai-endpoint", required=True,
     help="Azure OpenAI endpoint (e.g. https://<resource>.openai.azure.com/openai/deployments/<deployment>)")
 parser.add_argument("--aoai-key", required=True, help="Azure OpenAI API key")
@@ -34,7 +35,7 @@ args = parser.parse_args()
 
 account = json.loads(subprocess.run(
     ["az", "account", "show", "-o", "json"],
-    capture_output=True, text=True, shell=True).stdout)
+    capture_output=True, text=True, check=True).stdout)
 
 subscription_id = account["id"]
 rg = args.resource_group or "sandbox-lab-rg"
@@ -54,12 +55,15 @@ mgmt = SandboxGroupManagementClient(subscription_id=subscription_id, resource_gr
 
 # 1. Create resources (idempotent)
 print("\n1. Creating resources...")
-subprocess.run(["az", "group", "create", "--name", rg, "--location", location, "-o", "none"], shell=True)
+subprocess.run(["az", "group", "create", "--name", rg, "--location", location, "-o", "none"], check=True)
 try:
     mgmt.create_group(sg, location=location)
     print(f"   Group: {sg} (created)")
-except Exception:
-    print(f"   Group: {sg} (already exists)")
+except Exception as exc:
+    if "already exists" in str(exc).lower() or "conflict" in str(exc).lower():
+        print(f"   Group: {sg} (already exists)")
+    else:
+        raise
 
 sbx = client.create_sandbox(sg, disk="ubuntu", cpu="2000m", memory="4096Mi")
 sandbox_id = sbx["id"]
@@ -88,22 +92,22 @@ else:
     api_key_env = args.aoai_key
 
 copilot_env = " && ".join([
-    f"export COPILOT_PROVIDER_BASE_URL={args.aoai_endpoint}",
+    f"export COPILOT_PROVIDER_BASE_URL={shlex.quote(args.aoai_endpoint)}",
     "export COPILOT_PROVIDER_TYPE=azure",
-    f"export COPILOT_PROVIDER_API_KEY={api_key_env}",
-    f"export COPILOT_MODEL={args.model}",
+    f"export COPILOT_PROVIDER_API_KEY={shlex.quote(api_key_env)}",
+    f"export COPILOT_MODEL={shlex.quote(args.model)}",
     "export COPILOT_OFFLINE=true",
 ])
 
 # 4. Run Copilot CLI
 if args.prompt:
     print(f"\n4. Running Copilot CLI: {args.prompt}")
-    result = client.exec(sandbox_id, sg, f'{copilot_env} && copilot -p "{args.prompt}" 2>&1')
+    result = client.exec(sandbox_id, sg, f'{copilot_env} && copilot -p {shlex.quote(args.prompt)} 2>&1')
     print(f"   {result['stdout'].strip()}")
 else:
     print("\n4. Sandbox ready for Copilot CLI!")
     print(f"   SSH in:  node plugin/skills/azure-sandbox/assets/ssh.mjs {sandbox_id} -g {rg} -s {sg}")
-    print(f"            python scripts/ssh.py {sandbox_id} -g {rg} -s {sg}")
+    print(f"            az sandbox ssh -g {rg} -s {sg} --id {sandbox_id}")
     print(f"   Then set env vars and run copilot:")
     print(f"     export COPILOT_PROVIDER_BASE_URL={args.aoai_endpoint}")
     print(f"     export COPILOT_PROVIDER_TYPE=azure")
@@ -120,7 +124,7 @@ print("   Deleted sandbox")
 if args.cleanup:
     mgmt.delete_group(sg)
     print("   Deleted group")
-    subprocess.run(["az", "group", "delete", "--name", rg, "--yes", "--no-wait"], shell=True)
+    subprocess.run(["az", "group", "delete", "--name", rg, "--yes", "--no-wait"], check=True)
     print("   Deleting resource group (async)")
 
 print("\nDone!")

@@ -71,8 +71,14 @@ for artifact in "${artifacts[@]}"; do
   echo "  - $(basename "$artifact")"
 done
 
+# Detect pre-release versions (tags containing a/b/rc) and set flag accordingly.
+PRERELEASE_FLAG=""
+if [[ "$TAG" =~ (a|b|rc|alpha|beta|dev) ]]; then
+  PRERELEASE_FLAG="--prerelease"
+fi
+
 # gh release create both creates the release and uploads each artifact passed on the command line.
-if ! gh release create "$TAG" --repo "$REPO" --title "$TAG" --notes "Release $TAG" --prerelease "${artifacts[@]}"; then
+if ! gh release create "$TAG" --repo "$REPO" --title "$TAG" --notes "Release $TAG" $PRERELEASE_FLAG "${artifacts[@]}"; then
   die "gh release create failed for tag $TAG."
 fi
 

@@ -1,8 +1,8 @@
 """Deploy a Web App to a Sandbox.
 
 Usage:
-    python 02-deploy-web-app.py -g <resource-group> -s <sandbox-group> -l <location>
-    python 02-deploy-web-app.py  # uses defaults
+    python deploy-web-app.py -g <resource-group> -s <sandbox-group> -l <location>
+    python deploy-web-app.py  # uses defaults
 """
 
 import argparse
@@ -18,7 +18,7 @@ args = parser.parse_args()
 
 account = json.loads(subprocess.run(
     ["az", "account", "show", "-o", "json"],
-    capture_output=True, text=True, shell=True).stdout)
+    capture_output=True, text=True, check=True).stdout)
 
 subscription_id = account["id"]
 rg = args.resource_group or "sandbox-lab-rg"
@@ -36,11 +36,11 @@ mgmt = SandboxGroupManagementClient(subscription_id=subscription_id, resource_gr
 
 # 1. Create resources
 print("\n1. Creating resources...")
-subprocess.run(["az", "group", "create", "--name", rg, "--location", location, "-o", "none"], shell=True)
+subprocess.run(["az", "group", "create", "--name", rg, "--location", location, "-o", "none"], check=True)
 group = mgmt.create_group(sg, location=location)
 print(f"   Group: {group['name']}")
 
-sbx = client.create_sandbox(sg, disk="ubuntu")
+sbx = client.create_sandbox(sg, disk="node-24")
 sandbox_id = sbx["id"]
 print(f"   Sandbox: {sandbox_id}")
 
@@ -65,7 +65,7 @@ print("   Uploaded /app/index.js")
 
 # 3. Start server
 print("\n3. Starting server...")
-client.exec(sandbox_id, sg, "cd /app && node index.js &")
+client.exec(sandbox_id, sg, "cd /app && nohup node index.js > /dev/null 2>&1 &")
 time.sleep(2)
 result = client.exec(sandbox_id, sg, "curl -s http://localhost:8080")
 print(f"   Local: {result['stdout'].strip()[:80]}...")
@@ -82,8 +82,9 @@ for p in ports.get("ports", []):
 if url:
     print("\n5. Testing public URL...")
     time.sleep(3)
-    result = client.exec(sandbox_id, sg, f"curl -s {url}")
-    print(f"   Response: {result['stdout'].strip()[:100]}")
+    import urllib.request
+    response = urllib.request.urlopen(url)
+    print(f"   Response: {response.read().decode()[:100]}")
 
 # 6. Clean up
 print("\n6. Cleaning up...")
@@ -91,7 +92,7 @@ client.delete_sandbox(sandbox_id, sg)
 print("   Deleted sandbox")
 mgmt.delete_group(sg)
 print("   Deleted group")
-subprocess.run(["az", "group", "delete", "--name", rg, "--yes", "--no-wait"], shell=True)
+subprocess.run(["az", "group", "delete", "--name", rg, "--yes", "--no-wait"], check=True)
 print("   Deleting resource group (async)")
 
 print("\nDone!")

@@ -35,7 +35,8 @@ gh release download --repo Azure-Samples/azure-container-apps-sandboxes --patter
 az extension add --source /tmp/az_cli_sandbox-*-py3-none-any.whl
 
 # From cloned repo
-bash scripts/setup.sh
+gh release download --repo Azure-Samples/azure-container-apps-sandboxes --pattern "az_cli_sandbox-*-py3-none-any.whl" --dir /tmp
+az extension add --source /tmp/az_cli_sandbox-*-py3-none-any.whl
 ```
 
 ### Python SDK only

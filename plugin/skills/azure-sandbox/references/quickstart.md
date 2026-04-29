@@ -13,9 +13,9 @@ az sandbox create -g my-rg -s my-group --disk ubuntu
 # 4. Run a command
 az sandbox exec -g my-rg -s my-group --id <sandbox-id> -c "echo hello"
 
-# 5. SSH in (Node.js recommended, Python also works)
+# 5. SSH in (Node.js recommended)
 node plugin/skills/azure-sandbox/assets/ssh.mjs <sandbox-id> -g my-rg -s my-group
-python scripts/ssh.py <sandbox-id> -g my-rg -s my-group
+az sandbox ssh -g my-rg -s my-group --id <sandbox-id>
 
 # 6. Clean up
 az sandbox delete -g my-rg -s my-group --id <sandbox-id> --yes
