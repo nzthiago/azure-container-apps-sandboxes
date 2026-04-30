@@ -17,6 +17,15 @@
       "skills": [
         "./plugin/skills/azure-sandbox"
       ]
+    },
+    {
+      "name": "azure-connectorgateway",
+      "source": "./plugin",
+      "description": "Azure Connector Gateway — manage gateways, connections, triggers, and MCP configs for sandbox automation.",
+      "version": "0.1.0",
+      "skills": [
+        "./plugin/skills/azure-connectorgateway"
+      ]
     }
   ]
 }
