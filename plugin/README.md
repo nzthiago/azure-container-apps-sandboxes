@@ -40,6 +40,8 @@ gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --
 az extension add --source /tmp/az_cli_sandbox-*-py3-none-any.whl
 ```
 
+For durable orchestration scenarios, start with the Durable Task Workflows lab in [`../labs/02-durable-task-workflows`](../labs/02-durable-task-workflows). It stays sample-only: install the sandbox wheels from this repo's GitHub Releases, then add the official `az durabletask` extension separately for scheduler and task hub lifecycle.
+
 ## Uninstall
 
 ```bash

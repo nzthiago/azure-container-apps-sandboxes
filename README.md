@@ -31,7 +31,7 @@ A Sandbox is a secure, isolated compute environment that can be created, used, s
 This repo contains developer tools, plugins, and tutorials for ACA Sandboxes:
 
 - **Plugin Store** — Copilot CLI and Claude Code plugins with the `azure-sandbox` skill
-- **Labs** — Hands-on Jupyter notebook tutorials
+- **Labs** — Hands-on Jupyter notebook tutorials, including a Durable Task Scheduler (DTS) sample pattern for sandbox workflows
 - **Release artifacts** — Python SDK and CLI extension wheels published through GitHub Releases
 
 ## Install
@@ -96,6 +96,7 @@ Use `mgmt` for sandbox group operations (create/delete groups) and `client` for 
 | Getting Started | [01-getting-started.ipynb](labs/01-sandbox-getting-started/01-getting-started.ipynb) | Full lifecycle: group → sandbox → exec → files → port → snapshot → stop → resume → cleanup |
 | Deploy Web App | [02-deploy-web-app.ipynb](labs/01-sandbox-getting-started/02-deploy-web-app.ipynb) | Upload code, start server, expose port, test public URL |
 | Copilot CLI (BYOK) | [03-copilot-cli.ipynb](labs/01-sandbox-getting-started/03-copilot-cli.ipynb) | BYOK Azure OpenAI, zero-trust egress, offline mode, SSH |
+| Durable Task Workflows | [01-orchestrate-sandbox-jobs.ipynb](labs/02-durable-task-workflows/01-orchestrate-sandbox-jobs.ipynb) | Sample DTS orchestration for sandbox jobs from Python; scheduler/task hub lifecycle stays on the official `az durabletask` extension |
 
 ## Portal
 

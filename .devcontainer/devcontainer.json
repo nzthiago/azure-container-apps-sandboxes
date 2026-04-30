@@ -8,7 +8,7 @@
       "version": "lts"
     }
   },
-  "postCreateCommand": "pip install jupyter azure-identity 2>/dev/null; echo 'Ready — install SDK wheels from the latest GitHub Release to get started.'",
+  "postCreateCommand": "pip install jupyter azure-identity 2>/dev/null; echo 'Ready — install sandbox SDK wheels from the latest GitHub Release to get started. For DTS labs, also add the official az durabletask extension and durabletask-azuremanaged.'",
   "customizations": {
     "vscode": {
       "extensions": [

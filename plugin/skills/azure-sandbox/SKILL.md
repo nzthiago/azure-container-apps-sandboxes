@@ -90,11 +90,14 @@ See [ssh-setup.md](references/ssh-setup.md). On Windows, prefer the Node.js opti
 
 See [labs/README.md](https://github.com/Azure-Samples/azure-container-apps-sandboxes/blob/main/labs/README.md) for all labs.
 
+For durable orchestration scenarios, start with the [Durable Task Workflows lab](https://github.com/Azure-Samples/azure-container-apps-sandboxes/blob/main/labs/02-durable-task-workflows/01-orchestrate-sandbox-jobs.ipynb). It is a sample pattern layered on sandboxes: DTS scheduler and task hub lifecycle stay on the official `az durabletask` extension.
+
 ## References
 
 - [prerequisites.md](references/prerequisites.md)
 - [quickstart.md](references/quickstart.md)
 - [deploy-patterns.md](references/deploy-patterns.md)
+- [durable-task-workflows.md](references/durable-task-workflows.md)
 - [ssh-setup.md](references/ssh-setup.md)
 
 

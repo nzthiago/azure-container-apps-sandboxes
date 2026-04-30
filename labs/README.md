@@ -15,6 +15,8 @@ pip install azure-sandbox azure-mgmt-sandbox
 # Open any notebook in VS Code and run step by step
 ```
 
+For the Durable Task Workflows lab only, also install the official `az durabletask` extension and the optional `durabletask-azuremanaged` Python package. See [`02-durable-task-workflows/README.md`](02-durable-task-workflows/README.md) for the DTS-specific setup.
+
 ## Sandbox Labs
 
 | Lab | Notebook | What You Learn |
@@ -22,3 +24,4 @@ pip install azure-sandbox azure-mgmt-sandbox
 | Getting Started | [01-getting-started.ipynb](01-sandbox-getting-started/01-getting-started.ipynb) | Full lifecycle: group + sandbox + exec + port + snapshot + stop + resume |
 | Deploy Web App | [02-deploy-web-app.ipynb](01-sandbox-getting-started/02-deploy-web-app.ipynb) | Upload code, start server, expose port, test public URL |
 | Copilot CLI (BYOK) | [03-copilot-cli.ipynb](01-sandbox-getting-started/03-copilot-cli.ipynb) | BYOK Azure OpenAI, zero-trust egress, offline mode, SSH |
+| Durable Task Workflows | [01-orchestrate-sandbox-jobs.ipynb](02-durable-task-workflows/01-orchestrate-sandbox-jobs.ipynb) | Sample DTS orchestration for sandbox jobs; use the official `az durabletask` extension for scheduler and task hub lifecycle |
