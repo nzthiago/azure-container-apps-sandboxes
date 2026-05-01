@@ -106,8 +106,7 @@ if args.prompt:
     print(f"   {result['stdout'].strip()}")
 else:
     print("\n4. Sandbox ready for Copilot CLI!")
-    print(f"   SSH in:  node plugin/skills/azure-sandbox/assets/ssh.mjs {sandbox_id} -g {rg} -s {sg}")
-    print(f"            az sandbox ssh -g {rg} -s {sg} --id {sandbox_id}")
+    print(f"   Shell:   aca sandbox shell --id {sandbox_id} -g {rg} --group {sg}")
     print(f"   Then set env vars and run copilot:")
     print(f"     export COPILOT_PROVIDER_BASE_URL={args.aoai_endpoint}")
     print(f"     export COPILOT_PROVIDER_TYPE=azure")
