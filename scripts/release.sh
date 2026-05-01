@@ -15,7 +15,7 @@ Arguments:
   artifact-directory  Directory containing artifacts. Defaults to the current directory.
 
 Artifact selection:
-  - All wheel files (*.whl), including CLI extension wheels that may not start with "azure"
+  - All wheel files (*.whl) and npm packages (*.tgz)
   - Azure source distributions matching azure*.tar.gz
 
 Examples:
@@ -49,14 +49,14 @@ command -v gh >/dev/null 2>&1 || die "GitHub CLI (gh) is required but was not fo
 
 ARTIFACT_DIR="$(cd "$ARTIFACT_DIR" && pwd -P)"
 
-# Upload every wheel so CLI extension wheels are included, and azure*.tar.gz source archives.
+# Upload wheels, npm packages, and azure*.tar.gz source archives.
 artifacts=()
 while IFS= read -r -d '' file; do
   artifacts+=("$file")
-done < <(find "$ARTIFACT_DIR" -maxdepth 1 -type f \( -name '*.whl' -o -name 'azure*.tar.gz' \) -print0)
+done < <(find "$ARTIFACT_DIR" -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tgz' -o -name 'azure*.tar.gz' \) -print0)
 
 if [[ ${#artifacts[@]} -eq 0 ]]; then
-  die "No release artifacts found in $ARTIFACT_DIR. Expected wheel files (*.whl) and/or azure*.tar.gz files."
+  die "No release artifacts found in $ARTIFACT_DIR. Expected wheel (*.whl), npm (*.tgz), and/or azure*.tar.gz files."
 fi
 
 # Fail early with a clear message instead of letting gh return a less specific error.

@@ -31,8 +31,8 @@ A Sandbox is a secure, isolated compute environment that can be created, used, s
 This repo contains developer tools, plugins, and tutorials for ACA Sandboxes:
 
 - **Plugin Store** — Copilot CLI and Claude Code plugins with the `azure-sandbox` skill
-- **Labs** — Hands-on Jupyter notebook tutorials, including a Durable Task Scheduler (DTS) sample pattern for sandbox workflows
-- **Release artifacts** — Python SDK and CLI extension wheels published through GitHub Releases
+- **Labs** — Hands-on Jupyter notebook tutorials
+- **Release artifacts** — Python SDK wheels and ACA CLI npm package published through GitHub Releases
 
 ## Install
 
@@ -56,18 +56,21 @@ gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --
 pip install /tmp/azure_sandbox-*.whl /tmp/azure_mgmt_sandbox-*.whl
 ```
 
-### az CLI Extension
+### ACA CLI
 
 ```bash
-# From GitHub Release
-gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "az_cli_sandbox-*.whl" --dir /tmp
-az extension add --source /tmp/az_cli_sandbox-*.whl
+# From npm
+npm install -g @azure/aca-cli
+
+# Or from GitHub Release
+gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure-aca-cli-*.tgz" --dir /tmp
+npm install -g /tmp/azure-aca-cli-*.tgz
 ```
 
 ### Uninstall
 
 ```bash
-az extension remove --name sandbox
+npm uninstall -g @azure/aca-cli
 pip uninstall azure-sandbox azure-mgmt-sandbox
 ```
 

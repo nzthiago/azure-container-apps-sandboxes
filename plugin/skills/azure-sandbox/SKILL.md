@@ -28,15 +28,14 @@ A first-class resource type in Azure Container Apps providing fast, secure, ephe
 claude plugin add Azure-Samples/azure-container-apps-sandboxes
 ```
 
-### az CLI extension
+### ACA CLI
 ```bash
-# From GitHub Release
-gh release download --repo Azure-Samples/azure-container-apps-sandboxes --pattern "az_cli_sandbox-*-py3-none-any.whl" --dir /tmp
-az extension add --source /tmp/az_cli_sandbox-*-py3-none-any.whl
+# From npm
+npm install -g @azure/aca-cli
 
-# From cloned repo
-gh release download --repo Azure-Samples/azure-container-apps-sandboxes --pattern "az_cli_sandbox-*-py3-none-any.whl" --dir /tmp
-az extension add --source /tmp/az_cli_sandbox-*-py3-none-any.whl
+# Or from GitHub Release
+gh release download --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure-aca-cli-*.tgz" --dir /tmp
+npm install -g /tmp/azure-aca-cli-*.tgz
 ```
 
 ### Python SDK only
@@ -52,15 +51,15 @@ pip install /tmp/azure_mgmt_sandbox-*-py3-none-any.whl
 
 ### Uninstall
 ```bash
-az extension remove --name sandbox    # remove az CLI extension
+npm uninstall -g @azure/aca-cli       # remove ACA CLI
 pip uninstall azure-sandbox azure-mgmt-sandbox             # remove standalone SDK (if installed separately)
 ```
 
-> If a user asks to uninstall or remove the sandbox extension, run `az extension remove --name sandbox`.
+> If a user asks to uninstall or remove the ACA CLI, run `npm uninstall -g @azure/aca-cli`.
 
-## az CLI
+## ACA CLI
 
-Run `az sandboxgroup --help` and `az sandbox --help` to see all available commands.
+Run `aca sandboxgroup --help` and `aca sandbox --help` to see all available commands. The ACA CLI requires `az login` for authentication.
 
 ## Python SDK
 
@@ -82,9 +81,13 @@ Run `help(client)` and `help(mgmt)` to see all available methods.
 - Sandboxes: `https://containerapps.azure.com/sandbox-groups/<rg>/<name>/sandboxes`
 - Sandbox detail: `https://containerapps.azure.com/sandbox-groups/<rg>/<name>/sandboxes/<id>`
 
-## SSH
+## Interactive Shell
 
-See [ssh-setup.md](references/ssh-setup.md). On Windows, prefer the Node.js option for best experience.
+```bash
+aca sandbox shell --id <sandbox-id> -g <rg> --group <sandbox-group>
+```
+
+See [ssh-setup.md](references/ssh-setup.md) for details.
 
 ## Labs
 
@@ -94,8 +97,13 @@ See [labs/README.md](https://github.com/Azure-Samples/azure-container-apps-sandb
 
 - [prerequisites.md](references/prerequisites.md)
 - [quickstart.md](references/quickstart.md)
-- [deploy-patterns.md](references/deploy-patterns.md)
 - [ssh-setup.md](references/ssh-setup.md)
+
+## Runbooks
+
+- [Getting Started](references/getting-started-runbook.md) — full sandbox lifecycle
+- [Deploy Web App](references/deploy-web-app-runbook.md) — upload code, start server, expose port
+- [Copilot CLI BYOK](references/copilot-cli-byok-runbook.md) — Azure OpenAI BYOK with zero-trust egress
 
 
 
