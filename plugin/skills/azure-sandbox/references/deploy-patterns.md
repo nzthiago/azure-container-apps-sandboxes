@@ -23,13 +23,6 @@ Fan out across N sandboxes, secrets stay outside, scale to zero.
 - Script: coming soon
 - Lab: coming soon
 
-## Durable Task Workflows
-Durable Task Scheduler orchestrates sandbox jobs from a notebook or script.
-The default worker stays outside the sandbox.
-- Script: [durable-task-sandbox-workflows.py](../scripts/durable-task-sandbox-workflows.py)
-- Reference: [durable-task-workflows.md](durable-task-workflows.md)
-- Lab: [01-orchestrate-sandbox-jobs.ipynb](https://github.com/Azure-Samples/azure-container-apps-sandboxes/blob/main/labs/02-durable-task-workflows/01-orchestrate-sandbox-jobs.ipynb)
-
 ## Copilot CLI
 Create sandbox, install Copilot CLI, configure Azure OpenAI BYOK.
 Supports zero-trust mode where API key is injected via egress rules.
