@@ -81,9 +81,13 @@ Run `help(client)` and `help(mgmt)` to see all available methods.
 - Sandboxes: `https://containerapps.azure.com/sandbox-groups/<rg>/<name>/sandboxes`
 - Sandbox detail: `https://containerapps.azure.com/sandbox-groups/<rg>/<name>/sandboxes/<id>`
 
-## SSH
+## Interactive Shell
 
-See [ssh-setup.md](references/ssh-setup.md). On Windows, prefer the Node.js option for best experience.
+```bash
+aca sandbox shell --id <sandbox-id> -g <rg> --group <sandbox-group>
+```
+
+See [ssh-setup.md](references/ssh-setup.md) for details.
 
 ## Labs
 
@@ -93,8 +97,13 @@ See [labs/README.md](https://github.com/Azure-Samples/azure-container-apps-sandb
 
 - [prerequisites.md](references/prerequisites.md)
 - [quickstart.md](references/quickstart.md)
-- [deploy-patterns.md](references/deploy-patterns.md)
 - [ssh-setup.md](references/ssh-setup.md)
+
+## Runbooks
+
+- [Getting Started](references/getting-started-runbook.md) — full sandbox lifecycle
+- [Deploy Web App](references/deploy-web-app-runbook.md) — upload code, start server, expose port
+- [Copilot CLI BYOK](references/copilot-cli-byok-runbook.md) — Azure OpenAI BYOK with zero-trust egress
 
 
 
