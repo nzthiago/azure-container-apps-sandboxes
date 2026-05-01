@@ -6,20 +6,20 @@
 |-------------|-------|---------|
 | Azure CLI | `az --version` | [Install](https://learn.microsoft.com/cli/azure/install-azure-cli) |
 | Azure login | `az account show` | `az login` |
+| Node.js 18+ | `node --version` | [nodejs.org](https://nodejs.org) |
 | Python 3.10+ | `python --version` | [python.org](https://python.org) |
 
-## Install SDK + CLI Extension
+## Install ACA CLI + SDK
 
 ```bash
-# From GitHub Release
-gh release download --repo Azure-Samples/azure-container-apps-sandboxes --pattern "az_cli_sandbox-*-py3-none-any.whl" --dir /tmp
-az extension add --source /tmp/az_cli_sandbox-*-py3-none-any.whl
+# ACA CLI
+npm install -g @azure/aca-cli
 
-# Or from cloned repo
-git clone https://github.com/Azure-Samples/azure-container-apps-sandboxes.git
-cd azure-container-apps-sandboxes
-gh release download --pattern "az_cli_sandbox-*-py3-none-any.whl" --dir /tmp
-az extension add --source /tmp/az_cli_sandbox-*-py3-none-any.whl
+# From GitHub Release (SDK)
+gh release download --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_sandbox-*-py3-none-any.whl" --dir /tmp
+pip install /tmp/azure_sandbox-*-py3-none-any.whl
+gh release download --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_mgmt_sandbox-*-py3-none-any.whl" --dir /tmp
+pip install /tmp/azure_mgmt_sandbox-*-py3-none-any.whl
 ```
 
 ## Azure Setup (one-time)

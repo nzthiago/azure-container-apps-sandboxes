@@ -26,24 +26,23 @@ claude plugin add Azure-Samples/azure-container-apps-sandboxes
 
 ## Prerequisites
 
-Skills reference the sandbox az CLI extension and Python SDK. Install them:
+Skills reference the ACA CLI and Python SDK. Install them:
 
 ```bash
+# ACA CLI
+npm install -g @azure/aca-cli
+
 # From GitHub Release (SDK)
 gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_sandbox-*-py3-none-any.whl" --dir /tmp
 pip install /tmp/azure_sandbox-*-py3-none-any.whl
 gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_mgmt_sandbox-*-py3-none-any.whl" --dir /tmp
 pip install /tmp/azure_mgmt_sandbox-*-py3-none-any.whl
-
-# From GitHub Release (az CLI extension)
-gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "az_cli_sandbox-*-py3-none-any.whl" --dir /tmp
-az extension add --source /tmp/az_cli_sandbox-*-py3-none-any.whl
 ```
 
 ## Uninstall
 
 ```bash
-az extension remove --name sandbox
+npm uninstall -g @azure/aca-cli
 pip uninstall azure-sandbox azure-mgmt-sandbox
 ```
 
