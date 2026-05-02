@@ -51,35 +51,33 @@ claude plugin add Azure-Samples/azure-container-apps-sandboxes
 
 ```bash
 # From GitHub Release
-gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_sandbox-*.whl" --dir /tmp
-gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_mgmt_sandbox-*.whl" --dir /tmp
-pip install /tmp/azure_sandbox-*.whl /tmp/azure_mgmt_sandbox-*.whl
+gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_containerapps_sandbox-*.whl" --dir /tmp
+pip install /tmp/azure_containerapps_sandbox-*.whl
 ```
 
 ### ACA CLI
 
 ```bash
-npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-aca-cli-1.0.0-beta.1.tgz
+npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-containerapps-cli-1.0.0-beta.1.tgz
 ```
 
 ### Uninstall
 
 ```bash
-npm uninstall -g @azure/aca-cli
-pip uninstall azure-sandbox azure-mgmt-sandbox
+npm uninstall -g @azure/containerapps-cli
+pip uninstall azure-containerapps-sandbox
 ```
 
 ## SDK Usage
 
 ```python
-from azure.sandbox import SandboxClient
-from azure.mgmt.sandbox import SandboxGroupManagementClient
+from azure.containerapps.sandbox import SandboxClient, SandboxGroupClient
 
 client = SandboxClient(resource_group="my-rg")
-mgmt = SandboxGroupManagementClient(resource_group="my-rg")
+mgmt = SandboxGroupClient(resource_group="my-rg")
 ```
 
-Use `mgmt` for sandbox group operations (create/delete groups) and `client` for sandbox operations (create, exec, files, ports, snapshots, etc.). For end-to-end examples, see the notebooks in [`labs/`](labs/).
+Use `mgmt` (`SandboxGroupClient`) for sandbox group operations (create/delete groups) and `client` for sandbox operations (create, exec, files, ports, snapshots, etc.). For end-to-end examples, see the notebooks in [`labs/`](labs/).
 
 ## Skills
 
@@ -121,7 +119,7 @@ Labs live in `labs/<topic>/` as Jupyter notebooks (`.ipynb`). Each lab should:
 
 - Be self-contained — runnable with just `az login` and the SDK installed
 - Include setup, step-by-step walkthrough, and cleanup cells
-- Use `SandboxClient` and `SandboxGroupManagementClient` from the current SDK
+- Use `SandboxClient` and `SandboxGroupClient` from the current SDK
 
 To add a new lab, create a directory under `labs/`, add your notebooks, and update [`labs/README.md`](labs/README.md).
 

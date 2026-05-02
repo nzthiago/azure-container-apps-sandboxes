@@ -22,4 +22,4 @@ Your first sandbox — from zero to running commands in a hardware-isolated micr
 ## Prerequisites
 
 - Azure CLI: `az login`
-- SDK: `pip install azure-sandbox azure-mgmt-sandbox`
+- SDK: `pip install azure-containerapps-sandbox`

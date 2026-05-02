@@ -8,7 +8,7 @@ Deploy a Node.js web server to a sandbox, expose it publicly, and test it.
 
 ```bash
 az login
-npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-aca-cli-1.0.0-beta.1.tgz
+npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-containerapps-cli-1.0.0-beta.1.tgz
 ```
 
 > 💡 The `--disk node-24` flag selects an **OCI container image** with Node.js 24 pre-installed. Sandboxes run standard container images — bring your own runtime, libraries, and tools.

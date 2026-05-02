@@ -10,7 +10,7 @@ snapshot/resume, and scale-to-zero. Learn more in the [README](../README.md).
 
 ```bash
 # Install SDKs
-pip install azure-sandbox azure-mgmt-sandbox
+pip install azure-containerapps-sandbox
 
 # Open any notebook in VS Code and run step by step
 ```

@@ -8,7 +8,7 @@ Step-by-step walkthrough of the full sandbox lifecycle using the ACA CLI.
 
 ```bash
 az login
-npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-aca-cli-1.0.0-beta.1.tgz
+npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-containerapps-cli-1.0.0-beta.1.tgz
 ```
 
 > 💡 **Sandbox Groups** are the ARM resource (`Microsoft.App/SandboxGroups`) that organizes sandboxes. Think of it like a pool — you create sandboxes within a group that shares configuration and region.
