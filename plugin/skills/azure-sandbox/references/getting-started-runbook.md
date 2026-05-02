@@ -71,24 +71,31 @@ Create a snapshot:
 aca sandbox snapshot create --sandbox-id $SANDBOX_ID --name getting-started -g sandbox-lab-rg --group sandbox-lab-sg -o json
 ```
 
-## 7. Stop + Resume
+## 7. Stop + Resume (statefulness)
 
-Stop the sandbox:
+Before stopping, install a package and create state that proves persistence:
+
+```bash
+aca sandbox exec --id $SANDBOX_ID -c "apt-get update -qq && apt-get install -y -qq jq > /dev/null 2>&1 && echo 'jq installed'" -g sandbox-lab-rg --group sandbox-lab-sg
+aca sandbox exec --id $SANDBOX_ID -c "echo 'I survived suspend' > /tmp/state.txt && cat /tmp/state.txt" -g sandbox-lab-rg --group sandbox-lab-sg
+```
+
+Stop the sandbox — full memory and disk are captured:
 
 ```bash
 aca sandbox stop --id $SANDBOX_ID -g sandbox-lab-rg --group sandbox-lab-sg
 ```
 
-Resume it:
+Resume it — picks up exactly where it left off:
 
 ```bash
 aca sandbox resume --id $SANDBOX_ID -g sandbox-lab-rg --group sandbox-lab-sg
 ```
 
-Verify it came back:
+Verify state survived — the file, installed package, and even the earlier uploaded file are all still there:
 
 ```bash
-aca sandbox exec --id $SANDBOX_ID -c "echo Back from suspend!" -g sandbox-lab-rg --group sandbox-lab-sg
+aca sandbox exec --id $SANDBOX_ID -c "cat /tmp/state.txt && cat /tmp/hello.txt && jq --version" -g sandbox-lab-rg --group sandbox-lab-sg
 ```
 
 ## 8. Clean up
