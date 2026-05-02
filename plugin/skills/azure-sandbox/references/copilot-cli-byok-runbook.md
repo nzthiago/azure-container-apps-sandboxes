@@ -2,6 +2,8 @@
 
 Create a sandbox, install GitHub Copilot CLI, and configure it to use Azure OpenAI via BYOK. Supports zero-trust mode where the API key is injected via egress transform rules so it never enters the sandbox.
 
+> **Agent instructions:** Before running this runbook, check prerequisites (see SKILL.md Prerequisites Check). Then ask the user if they want to run all steps automatically or step through them one at a time. For zero-trust mode (step 3b), ask the user for their Azure OpenAI endpoint, model name, and API key before proceeding.
+
 ## Prerequisites
 
 ```bash

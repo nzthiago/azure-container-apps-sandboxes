@@ -2,6 +2,8 @@
 
 Deploy a Node.js web server to a sandbox, expose it publicly, and test it.
 
+> **Agent instructions:** Before running this runbook, check prerequisites (see SKILL.md Prerequisites Check). Then ask the user if they want to run all steps automatically or step through them one at a time.
+
 ## Prerequisites
 
 ```bash

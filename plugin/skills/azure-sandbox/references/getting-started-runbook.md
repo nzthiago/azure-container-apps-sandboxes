@@ -2,6 +2,8 @@
 
 Step-by-step walkthrough of the full sandbox lifecycle using the ACA CLI.
 
+> **Agent instructions:** Before running this runbook, check prerequisites (see SKILL.md Prerequisites Check). Then ask the user if they want to run all steps automatically or step through them one at a time.
+
 ## Prerequisites
 
 ```bash
