@@ -8,7 +8,7 @@ Create a sandbox, install GitHub Copilot CLI, and configure it to use Azure Open
 
 ```bash
 az login
-npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-aca-cli-1.0.0-beta.1.tgz
+npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-containerapps-cli-1.0.0-beta.1.tgz
 ```
 
 > 💡 Using `--cpu 2000m --memory 4096Mi` allocates 2 vCPUs and 4GB RAM — more resources for running Copilot CLI and its LLM interactions. You only pay for what you allocate, per second.

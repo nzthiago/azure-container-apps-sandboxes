@@ -30,20 +30,18 @@ Skills reference the ACA CLI and Python SDK. Install them:
 
 ```bash
 # ACA CLI
-npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-aca-cli-1.0.0-beta.1.tgz
+npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-containerapps-cli-1.0.0-beta.1.tgz
 
 # From GitHub Release (SDK)
-gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_sandbox-*-py3-none-any.whl" --dir /tmp
-pip install /tmp/azure_sandbox-*-py3-none-any.whl
-gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_mgmt_sandbox-*-py3-none-any.whl" --dir /tmp
-pip install /tmp/azure_mgmt_sandbox-*-py3-none-any.whl
+gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_containerapps_sandbox-*-py3-none-any.whl" --dir /tmp
+pip install /tmp/azure_containerapps_sandbox-*-py3-none-any.whl
 ```
 
 ## Uninstall
 
 ```bash
-npm uninstall -g @azure/aca-cli
-pip uninstall azure-sandbox azure-mgmt-sandbox
+npm uninstall -g @azure/containerapps-cli
+pip uninstall azure-containerapps-sandbox
 ```
 
 ## Skills

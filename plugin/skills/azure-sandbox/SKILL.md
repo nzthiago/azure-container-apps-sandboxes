@@ -30,27 +30,23 @@ claude plugin add Azure-Samples/azure-container-apps-sandboxes
 
 ### ACA CLI
 ```bash
-npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-aca-cli-1.0.0-beta.1.tgz
+npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-containerapps-cli-1.0.0-beta.1.tgz
 ```
 
 ### Python SDK only
 ```bash
 # From GitHub Release
-gh release download --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_sandbox-*-py3-none-any.whl" --dir /tmp
-pip install /tmp/azure_sandbox-*-py3-none-any.whl
-
-# Or install both SDKs
-gh release download --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_mgmt_sandbox-*-py3-none-any.whl" --dir /tmp
-pip install /tmp/azure_mgmt_sandbox-*-py3-none-any.whl
+gh release download --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_containerapps_sandbox-*-py3-none-any.whl" --dir /tmp
+pip install /tmp/azure_containerapps_sandbox-*-py3-none-any.whl
 ```
 
 ### Uninstall
 ```bash
-npm uninstall -g @azure/aca-cli       # remove ACA CLI
-pip uninstall azure-sandbox azure-mgmt-sandbox             # remove standalone SDK (if installed separately)
+npm uninstall -g @azure/containerapps-cli       # remove ACA CLI
+pip uninstall azure-containerapps-sandbox             # remove standalone SDK (if installed separately)
 ```
 
-> If a user asks to uninstall or remove the ACA CLI, run `npm uninstall -g @azure/aca-cli`.
+> If a user asks to uninstall or remove the ACA CLI, run `npm uninstall -g @azure/containerapps-cli`.
 
 ## Prerequisites Check
 
@@ -61,7 +57,7 @@ Before running any sandbox commands, check that all required tools are installed
 3. **Node.js 18+** — run `node --version`. If missing, tell the user to install it from https://nodejs.org
 4. **ACA CLI** — run `aca --version`. If missing, ask the user if they want to install it:
    ```bash
-   npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-aca-cli-1.0.0-beta.1.tgz
+   npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-containerapps-cli-1.0.0-beta.1.tgz
    ```
 
 ## Important
@@ -75,11 +71,10 @@ Run `aca sandboxgroup --help` and `aca sandbox --help` to see all available comm
 ## Python SDK
 
 ```python
-from azure.sandbox import SandboxClient
-from azure.mgmt.sandbox import SandboxGroupManagementClient
+from azure.containerapps.sandbox import SandboxClient, SandboxGroupClient
 
 client = SandboxClient(resource_group="my-rg")
-mgmt = SandboxGroupManagementClient(resource_group="my-rg")
+mgmt = SandboxGroupClient(resource_group="my-rg")
 ```
 
 Run `help(client)` and `help(mgmt)` to see all available methods.
