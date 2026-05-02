@@ -6,7 +6,7 @@ Create a sandbox, install GitHub Copilot CLI, and configure it to use Azure Open
 
 ```bash
 az login
-npm install -g @azure/aca-cli
+npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-aca-cli-1.0.0-beta.1.tgz
 ```
 
 ## 1. Create resources

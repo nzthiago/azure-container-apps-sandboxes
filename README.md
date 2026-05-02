@@ -59,12 +59,7 @@ pip install /tmp/azure_sandbox-*.whl /tmp/azure_mgmt_sandbox-*.whl
 ### ACA CLI
 
 ```bash
-# From npm
-npm install -g @azure/aca-cli
-
-# Or from GitHub Release
-gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure-aca-cli-*.tgz" --dir /tmp
-npm install -g /tmp/azure-aca-cli-*.tgz
+npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-aca-cli-1.0.0-beta.1.tgz
 ```
 
 ### Uninstall
