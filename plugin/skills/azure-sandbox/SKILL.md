@@ -52,6 +52,18 @@ pip uninstall azure-sandbox azure-mgmt-sandbox             # remove standalone S
 
 > If a user asks to uninstall or remove the ACA CLI, run `npm uninstall -g @azure/aca-cli`.
 
+## Prerequisites Check
+
+Before running any sandbox commands, check that all required tools are installed and the user is logged in. Run these checks silently and only prompt the user if something is missing.
+
+1. **Azure CLI** — run `az --version`. If missing, tell the user to install it from https://learn.microsoft.com/cli/azure/install-azure-cli
+2. **Azure login** — run `az account show`. If it fails, tell the user to run `az login` first.
+3. **Node.js 18+** — run `node --version`. If missing, tell the user to install it from https://nodejs.org
+4. **ACA CLI** — run `aca --version`. If missing, ask the user if they want to install it:
+   ```bash
+   npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-aca-cli-1.0.0-beta.1.tgz
+   ```
+
 ## ACA CLI
 
 Run `aca sandboxgroup --help` and `aca sandbox --help` to see all available commands. The ACA CLI requires `az login` for authentication.
