@@ -9,7 +9,7 @@ description: |
   - Stopping, resuming, snapshotting sandboxes
   - Deploying apps or MCP servers to sandboxes
   Triggers: "create sandbox", "sandbox group", "run command in sandbox",
-  "deploy to sandbox", "exec", "snapshot", "suspend", "resume", "ssh"
+  "deploy to sandbox", "exec", "snapshot", "suspend", "resume", "shell"
 ---
 
 # Azure Container Apps Sandboxes

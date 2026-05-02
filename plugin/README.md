@@ -1,6 +1,6 @@
 # Azure Container Apps Sandboxes — Plugin Marketplace
 
-Skills for Azure Container Apps Sandboxes — secure, isolated, ephemeral compute environments with sub-second startup, snapshot/resume, and scale-to-zero. Manage sandbox groups, sandboxes, exec, SSH, files, ports, egress, images, and snapshots.
+Skills for Azure Container Apps Sandboxes — secure, isolated, ephemeral compute environments with sub-second startup, snapshot/resume, and scale-to-zero. Manage sandbox groups, sandboxes, exec, shell, files, ports, egress, images, and snapshots.
 
 ## Install
 
@@ -50,4 +50,4 @@ pip uninstall azure-sandbox azure-mgmt-sandbox
 
 | Skill | Domain | Status |
 |-------|--------|--------|
-| [azure-sandbox](skills/azure-sandbox/SKILL.md) | Sandbox groups, sandboxes, exec, SSH, files, ports, egress, images, snapshots | Available |
+| [azure-sandbox](skills/azure-sandbox/SKILL.md) | Sandbox groups, sandboxes, exec, shell, files, ports, egress, images, snapshots | Available |

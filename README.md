@@ -85,7 +85,7 @@ Use `mgmt` for sandbox group operations (create/delete groups) and `client` for 
 
 | Skill | Description |
 |-------|-------------|
-| [azure-sandbox](plugin/skills/azure-sandbox/SKILL.md) | Manage sandbox groups and sandboxes — create, exec, SSH, files, ports, egress, images, snapshots, stop/resume |
+| [azure-sandbox](plugin/skills/azure-sandbox/SKILL.md) | Manage sandbox groups and sandboxes — create, exec, shell, files, ports, egress, images, snapshots, stop/resume |
 
 ## Labs
 
@@ -93,7 +93,7 @@ Use `mgmt` for sandbox group operations (create/delete groups) and `client` for 
 |-----|----------|----------------|
 | Getting Started | [01-getting-started.ipynb](labs/01-sandbox-getting-started/01-getting-started.ipynb) | Full lifecycle: group → sandbox → exec → files → port → snapshot → stop → resume → cleanup |
 | Deploy Web App | [02-deploy-web-app.ipynb](labs/01-sandbox-getting-started/02-deploy-web-app.ipynb) | Upload code, start server, expose port, test public URL |
-| Copilot CLI (BYOK) | [03-copilot-cli.ipynb](labs/01-sandbox-getting-started/03-copilot-cli.ipynb) | BYOK Azure OpenAI, zero-trust egress, offline mode, SSH |
+| Copilot CLI (BYOK) | [03-copilot-cli.ipynb](labs/01-sandbox-getting-started/03-copilot-cli.ipynb) | BYOK Azure OpenAI, zero-trust egress, offline mode |
 
 ## Portal
 
@@ -111,9 +111,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for general guidance.
 Skills live in `plugin/skills/<skill-name>/` and include:
 
 - `SKILL.md` — Skill description, install instructions, usage examples, and references
-- `scripts/` — Runnable Python scripts that demonstrate the skill end-to-end
-- `references/` — Supplementary docs (prerequisites, patterns, setup guides)
-- `assets/` — Helper files (e.g., SSH client)
+- `references/` — Supplementary docs, runbooks, and setup guides
 
 To add a new skill, create a directory under `plugin/skills/`, add a `SKILL.md` with install/usage instructions, and register it in [`marketplace.json`](marketplace.json).
 
