@@ -17,7 +17,7 @@ Your first sandbox — from zero to running commands in a hardware-isolated micr
 | Mode | How | Best for |
 |------|-----|----------|
 | **Notebook** | Open `01-getting-started.ipynb` in VS Code | Humans — step by step with explanations |
-| **Script** | `python plugin/skills/azure-sandbox/scripts/sandbox-getting-started.py` | Agents, CI, quick test |
+| **Script** | See [getting-started-runbook.md](../../plugin/skills/azure-sandbox/references/getting-started-runbook.md) | Agents, CI, quick test |
 
 ## Prerequisites
 

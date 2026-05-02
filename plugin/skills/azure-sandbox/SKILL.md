@@ -98,7 +98,7 @@ Run `help(client)` and `help(mgmt)` to see all available methods.
 aca sandbox shell --id <sandbox-id> -g <rg> --group <sandbox-group>
 ```
 
-See [ssh-setup.md](references/ssh-setup.md) for details.
+See [shell-setup.md](references/shell-setup.md) for details.
 
 ## Labs
 
@@ -108,7 +108,7 @@ See [labs/README.md](https://github.com/Azure-Samples/azure-container-apps-sandb
 
 - [prerequisites.md](references/prerequisites.md)
 - [quickstart.md](references/quickstart.md)
-- [ssh-setup.md](references/ssh-setup.md)
+- [shell-setup.md](references/shell-setup.md)
 
 ## Runbooks
 
