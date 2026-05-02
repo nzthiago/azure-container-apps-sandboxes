@@ -64,6 +64,10 @@ Before running any sandbox commands, check that all required tools are installed
    npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-aca-cli-1.0.0-beta.1.tgz
    ```
 
+## Important
+
+> **There are NO `az` commands for sandboxes or sandbox groups.** Do not use `az sandbox`, `az sandboxgroup`, or `az containerapp` for sandbox operations — these do not exist. `az containerapp` is for Container Apps (apps, jobs, and dynamic sessions), not sandboxes. All sandbox and sandbox group operations use the `aca` CLI. The only `az` commands used are standard Azure CLI commands like `az login`, `az account show`, and `az group create/delete` for resource group management.
+
 ## ACA CLI
 
 Run `aca sandboxgroup --help` and `aca sandbox --help` to see all available commands. The ACA CLI requires `az login` for authentication.
