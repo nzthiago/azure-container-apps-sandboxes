@@ -22,7 +22,7 @@ A first-class resource type in Azure Container Apps providing fast, secure, ephe
 ```bash
 # Copilot CLI
 /plugin marketplace add Azure-Samples/azure-container-apps-sandboxes
-/plugin install azure-sandbox@Azure-Container-Apps
+/plugin install azure-sandbox@azure-container-apps
 
 # Claude Code
 claude plugin add Azure-Samples/azure-container-apps-sandboxes

@@ -11,10 +11,10 @@ Skills for Azure Container Apps Sandboxes — secure, isolated, ephemeral comput
 /plugin marketplace add Azure-Samples/azure-container-apps-sandboxes
 
 # Install sandbox skill
-/plugin install azure-sandbox@Azure-Container-Apps
+/plugin install azure-sandbox@azure-container-apps
 
 # Or install a specific skill
-/plugin install azure-sandbox/sandbox@Azure-Container-Apps
+/plugin install azure-sandbox/sandbox@azure-container-apps
 ```
 
 ### Claude Code

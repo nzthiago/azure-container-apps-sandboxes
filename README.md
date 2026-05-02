@@ -41,7 +41,7 @@ This repo contains developer tools, plugins, and tutorials for ACA Sandboxes:
 ```bash
 # Copilot CLI — add the marketplace, then install the sandbox skill
 /plugin marketplace add Azure-Samples/azure-container-apps-sandboxes
-/plugin install azure-sandbox@Azure-Container-Apps
+/plugin install azure-sandbox@azure-container-apps
 
 # Claude Code
 claude plugin add Azure-Samples/azure-container-apps-sandboxes

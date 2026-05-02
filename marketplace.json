@@ -1,5 +1,5 @@
 {
-  "name": "Azure-Container-Apps",
+  "name": "azure-container-apps",
   "metadata": {
     "description": "Azure Container Apps Sandboxes — Plugin Marketplace",
     "version": "0.4.0-alpha.1"
