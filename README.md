@@ -41,7 +41,7 @@ This repo contains developer tools, plugins, and tutorials for ACA Sandboxes:
 ```bash
 # Copilot CLI — add the marketplace, then install the sandbox skill
 /plugin marketplace add Azure-Samples/azure-container-apps-sandboxes
-/plugin install azure-sandbox@Azure-Container-Apps
+/plugin install azure-sandbox@azure-container-apps
 
 # Claude Code
 claude plugin add Azure-Samples/azure-container-apps-sandboxes
@@ -59,12 +59,7 @@ pip install /tmp/azure_sandbox-*.whl /tmp/azure_mgmt_sandbox-*.whl
 ### ACA CLI
 
 ```bash
-# From npm
-npm install -g @azure/aca-cli
-
-# Or from GitHub Release
-gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure-aca-cli-*.tgz" --dir /tmp
-npm install -g /tmp/azure-aca-cli-*.tgz
+npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-aca-cli-1.0.0-beta.1.tgz
 ```
 
 ### Uninstall
@@ -90,7 +85,7 @@ Use `mgmt` for sandbox group operations (create/delete groups) and `client` for 
 
 | Skill | Description |
 |-------|-------------|
-| [azure-sandbox](plugin/skills/azure-sandbox/SKILL.md) | Manage sandbox groups and sandboxes — create, exec, SSH, files, ports, egress, images, snapshots, stop/resume |
+| [azure-sandbox](plugin/skills/azure-sandbox/SKILL.md) | Manage sandbox groups and sandboxes — create, exec, shell, files, ports, egress, images, snapshots, stop/resume |
 
 ## Labs
 
@@ -98,7 +93,7 @@ Use `mgmt` for sandbox group operations (create/delete groups) and `client` for 
 |-----|----------|----------------|
 | Getting Started | [01-getting-started.ipynb](labs/01-sandbox-getting-started/01-getting-started.ipynb) | Full lifecycle: group → sandbox → exec → files → port → snapshot → stop → resume → cleanup |
 | Deploy Web App | [02-deploy-web-app.ipynb](labs/01-sandbox-getting-started/02-deploy-web-app.ipynb) | Upload code, start server, expose port, test public URL |
-| Copilot CLI (BYOK) | [03-copilot-cli.ipynb](labs/01-sandbox-getting-started/03-copilot-cli.ipynb) | BYOK Azure OpenAI, zero-trust egress, offline mode, SSH |
+| Copilot CLI (BYOK) | [03-copilot-cli.ipynb](labs/01-sandbox-getting-started/03-copilot-cli.ipynb) | BYOK Azure OpenAI, zero-trust egress, offline mode |
 
 ## Portal
 
@@ -116,9 +111,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for general guidance.
 Skills live in `plugin/skills/<skill-name>/` and include:
 
 - `SKILL.md` — Skill description, install instructions, usage examples, and references
-- `scripts/` — Runnable Python scripts that demonstrate the skill end-to-end
-- `references/` — Supplementary docs (prerequisites, patterns, setup guides)
-- `assets/` — Helper files (e.g., SSH client)
+- `references/` — Supplementary docs, runbooks, and setup guides
 
 To add a new skill, create a directory under `plugin/skills/`, add a `SKILL.md` with install/usage instructions, and register it in [`marketplace.json`](marketplace.json).
 

@@ -2,7 +2,7 @@
 
 ## How Sandbox Shell Works
 
-- No port 22, no SSH keys, no SSH daemon
+- No port 22, no keys, no daemon
 - WebSocket connection to the sandbox management API
 - Authenticated via your `az login` token
 - Full TTY: colors, tab completion, vim, tmux all work
