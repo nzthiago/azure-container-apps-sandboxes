@@ -11,6 +11,8 @@ az login
 npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-aca-cli-1.0.0-beta.1.tgz
 ```
 
+> 💡 The `--disk node-24` flag selects an **OCI container image** with Node.js 24 pre-installed. Sandboxes run standard container images — bring your own runtime, libraries, and tools.
+
 ## 1. Create resources
 
 ```bash
@@ -24,6 +26,8 @@ Save the sandbox ID:
 ```bash
 SANDBOX_ID=<id-from-output>
 ```
+
+> 💡 **File upload** writes a local file into the sandbox's filesystem. The sandbox has its own isolated disk — files you upload are only visible inside that sandbox.
 
 ## 2. Upload app
 
@@ -52,6 +56,8 @@ Upload it to the sandbox:
 aca sandbox fs write --id $SANDBOX_ID --path /app/index.js --file /tmp/index.js -g sandbox-lab-rg --group sandbox-lab-sg
 ```
 
+> 💡 Processes inside the sandbox run independently. Using `nohup` keeps the server running even after the exec call returns. You can run multiple services inside a single sandbox.
+
 ## 3. Start the server
 
 ```bash
@@ -64,6 +70,8 @@ Test locally inside the sandbox:
 aca sandbox exec --id $SANDBOX_ID -c "sleep 2 && curl -s http://localhost:8080" -g sandbox-lab-rg --group sandbox-lab-sg
 ```
 
+> 💡 **Port exposure** creates a publicly accessible URL routed to the sandbox. The `--anonymous` flag allows unauthenticated access — useful for testing. Without it, requests require an Azure AD token.
+
 ## 4. Expose port
 
 ```bash
@@ -71,6 +79,8 @@ aca sandbox port add --id $SANDBOX_ID --port 8080 --anonymous -g sandbox-lab-rg 
 ```
 
 Copy the public URL from the output and test it in your browser or with curl.
+
+> 💡 Always clean up when done — sandboxes consume resources while running. Delete the sandbox first, then the group, then the resource group.
 
 ## 5. Clean up
 

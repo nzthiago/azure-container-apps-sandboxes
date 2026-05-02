@@ -11,6 +11,8 @@ az login
 npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-aca-cli-1.0.0-beta.1.tgz
 ```
 
+> 💡 Using `--cpu 2000m --memory 4096Mi` allocates 2 vCPUs and 4GB RAM — more resources for running Copilot CLI and its LLM interactions. You only pay for what you allocate, per second.
+
 ## 1. Create resources
 
 ```bash
@@ -25,11 +27,15 @@ Save the sandbox ID:
 SANDBOX_ID=<id-from-output>
 ```
 
+> 💡 **Exec** installs software inside the sandbox at runtime. Anything installed persists on the sandbox's disk and survives stop/resume cycles — no need to rebuild images.
+
 ## 2. Install Copilot CLI
 
 ```bash
 aca sandbox exec --id $SANDBOX_ID -c "curl -fsSL https://gh.io/copilot-install | bash 2>&1 | tail -2" -g sandbox-lab-rg --group sandbox-lab-sg
 ```
+
+> 💡 **BYOK (Bring Your Own Key)** lets you use your own Azure OpenAI endpoint. In standard mode, the API key is set as an environment variable inside the sandbox.
 
 ## 3a. Configure BYOK (standard)
 
@@ -49,6 +55,8 @@ export COPILOT_MODEL=<model-name>
 export COPILOT_OFFLINE=true
 copilot
 ```
+
+> 💡 **Zero-trust egress** is the most secure pattern. The API key never enters the sandbox — instead, the sandbox platform injects it into outbound requests via header transform rules. Even if the sandbox is compromised, the key can't be extracted.
 
 ## 3b. Configure BYOK (zero-trust)
 
@@ -100,6 +108,8 @@ export COPILOT_OFFLINE=true
 copilot
 ```
 
+> 💡 **One-shot exec** is useful for automation — run a single Copilot prompt and get the result without opening an interactive shell.
+
 ## 4. One-shot mode
 
 Run a single prompt without entering the shell:
@@ -107,6 +117,8 @@ Run a single prompt without entering the shell:
 ```bash
 aca sandbox exec --id $SANDBOX_ID -c "export COPILOT_PROVIDER_BASE_URL=<url> && export COPILOT_PROVIDER_TYPE=azure && export COPILOT_PROVIDER_API_KEY=<key> && export COPILOT_MODEL=<model> && export COPILOT_OFFLINE=true && copilot -p 'your prompt here' 2>&1" -g sandbox-lab-rg --group sandbox-lab-sg
 ```
+
+> 💡 You can delete just the sandbox (keeping the group for future sandboxes) or do a full cleanup including the resource group.
 
 ## 5. Clean up
 
