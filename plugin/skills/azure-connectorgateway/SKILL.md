@@ -116,10 +116,17 @@ No trigger config needed.
        print(f"  • {op['operationId']}: {op.get('summary', '')}  "
              f"[{op.get('method','?').upper()} {op.get('path','')}]")
    ```
-   Present the operations to the user. Common ones:
+   Present the operations to the user as numbered choices. Common ones:
    - Office 365: `SendMailV2`, `GetEmails`, `GetEvents`
    - SharePoint: `GetItems`, `PostItem`, `PatchItem`
    - OneDrive: `CreateFile`, `GetFileContent`, `ListFolder`
+
+   **Stop and wait for the user to select which operation they want to call.**
+
+   Once selected, show the operation's parameters (from Swagger) and ask the user
+   for the required values (e.g., folder path, file name, email recipient, etc.).
+
+   **Stop and wait for the user's parameter values before continuing.**
 
 2. **Build the `dynamicInvoke` payload.** The request object supports:
    - `method` — HTTP method (GET, POST, PUT, DELETE)
