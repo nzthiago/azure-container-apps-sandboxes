@@ -1,0 +1,29 @@
+"""Local provider config for the openai-agents lab.
+
+USAGE
+-----
+Copy this file to ``provider_config.py`` (in the same folder) and fill
+in EITHER the Azure OpenAI section OR the OpenAI section. All three
+notebooks in this folder will pick the values up automatically.
+
+``provider_config.py`` is gitignored. Don't paste secrets into the
+notebooks themselves.
+
+If you'd rather not use a config file, leave this template as-is and set
+the matching environment variables instead (``AZURE_OPENAI_ENDPOINT``,
+``AZURE_OPENAI_DEPLOYMENT``, ``AZURE_OPENAI_API_KEY``, ``OPENAI_API_KEY``,
+etc.). Azure OpenAI wins if both are configured.
+"""
+
+# --- Azure OpenAI (preferred; uses Entra ID by default) ---
+AZURE_OPENAI_ENDPOINT    = ''   # e.g. 'https://my-aoai.openai.azure.com/'
+AZURE_OPENAI_DEPLOYMENT  = ''   # the deployment name (e.g. 'gpt-4o')
+AZURE_OPENAI_API_VERSION = '2024-10-21'
+AZURE_OPENAI_API_KEY     = ''   # OPTIONAL. Leave '' to use Entra ID
+                                # (DefaultAzureCredential -- requires the
+                                # 'Cognitive Services OpenAI User' role
+                                # on the AOAI resource).
+
+# --- OpenAI ---
+OPENAI_API_KEY = ''             # paste your 'sk-...' key here
+OPENAI_MODEL   = 'gpt-4o'       # any chat-capable OpenAI model

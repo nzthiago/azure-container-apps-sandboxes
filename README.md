@@ -103,6 +103,9 @@ Use `mgmt` (`SandboxGroupClient`) for sandbox group operations (create/delete gr
 | Getting Started | [01-getting-started.ipynb](labs/01-sandbox-getting-started/01-getting-started.ipynb) | Full lifecycle: group → sandbox → exec → files → port → snapshot → stop → resume → cleanup |
 | Deploy Web App | [02-deploy-web-app.ipynb](labs/01-sandbox-getting-started/02-deploy-web-app.ipynb) | Upload code, start server, expose port, test public URL |
 | Copilot CLI (BYOK) | [03-copilot-cli.ipynb](labs/01-sandbox-getting-started/03-copilot-cli.ipynb) | BYOK Azure OpenAI, zero-trust egress, offline mode |
+| OpenAI Agents — Getting Started | [01-agents-getting-started.ipynb](labs/02-openai-agents-sandbox/01-agents-getting-started.ipynb) | Wrap the sandbox SDK as `@function_tool`s and run an OpenAI Agent against them |
+| OpenAI Agents — Coding Task | [02-agent-coding-task.ipynb](labs/02-openai-agents-sandbox/02-agent-coding-task.ipynb) | Agent reads `task.md`, edits `src/hello.py`, re-runs `pytest` until it passes |
+| OpenAI Agents — Live Preview | [03-agent-live-preview.ipynb](labs/02-openai-agents-sandbox/03-agent-live-preview.ipynb) | Agent serves a public web page from inside the sandbox via a per-port URL |
 
 ## Portal
 

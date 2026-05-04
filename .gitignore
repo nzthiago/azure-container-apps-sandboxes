@@ -22,6 +22,9 @@ env/
 # Jupyter
 .ipynb_checkpoints/
 
+# Lab provider config (may contain secrets)
+labs/**/provider_config.py
+
 # OS
 .DS_Store
 Thumbs.db
