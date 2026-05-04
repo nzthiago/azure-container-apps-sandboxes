@@ -139,11 +139,14 @@ No trigger config needed.
      ```python
      # Example: fetch Teams/channels dynamically
      result = conn_client.invoke_dynamic(gateway_name, connection_name,
-         method="GET", path="/beta/teams")
+         method="GET", path="/beta/me/joinedTeams")
      items = result['response']['body']['value']
-     # Present as choices: ["Team A", "Team B", ...]
+     # Present ALL items as choices — do NOT truncate or filter the list
+     choices = [item['displayName'] for item in items]
      ```
      Use `ask_user` with the fetched values as `choices`.
+     **IMPORTANT: Always include ALL returned items as choices.** Do not show only
+     a subset — the user needs to see every available option to make the right selection.
    - If the parameter has a **static enum** in the Swagger schema, present those
      values as choices.
    - If the parameter is **free-form** (string, number, etc.), ask the user to
