@@ -97,104 +97,109 @@ Ask the user:
 
 ---
 
-### Step 5A: Direct API calls via connection runtime URL
+### Step 5A: Direct API calls via dynamicInvoke
 
-The connection's `connectionRuntimeUrl` is a gateway-managed endpoint. Your app
-calls it **directly** with the operation's HTTP method, path, and parameters —
-the gateway injects the stored OAuth credentials and forwards to the connector.
+Call connector operations directly through the ARM `dynamicInvoke` endpoint.
+The gateway injects the stored OAuth credentials and forwards to the connector.
 No trigger config needed.
 
-1. Get the connection runtime URL:
-   ```python
-   conn = conn_client.get_connection(gateway_name, connection_name)
-   runtime_url = conn['properties']['connectionRuntimeUrl']
-   print(f"Runtime URL: {runtime_url}")
-   ```
+> **⚠️ IMPORTANT: Use the `request` format, NOT the `parameters` format.**
+> The `dynamicInvoke` API only accepts `{"request": {"method": ..., "path": ...}}`.
+> The `{"parameters": {"operationId": ...}}` format is NOT supported and returns 400.
 
-2. Discover available operations — get the connector's Swagger to find operation
-   paths, methods, and parameters:
+> **⚠️ Do NOT include `Content-*` headers** in the request object — the API rejects them.
+
+1. Discover available operations from the connector's Swagger:
    ```python
-   ops = conn_client.list_operations(gateway_name, connector_name)
+   ops = conn_client.get_swagger_operations(gateway_name, connector_name)
    for op in ops:
-       print(f"  • {op['operationId']}: {op.get('summary', '')}  [{op.get('method','?').upper()} {op.get('path','')}]")
+       print(f"  • {op['operationId']}: {op.get('summary', '')}  "
+             f"[{op.get('method','?').upper()} {op.get('path','')}]")
    ```
    Present the operations to the user. Common ones:
    - Office 365: `SendMailV2`, `GetEmails`, `GetEvents`
    - SharePoint: `GetItems`, `PostItem`, `PatchItem`
    - OneDrive: `CreateFile`, `GetFileContent`, `ListFolder`
 
-3. **Call the connection runtime URL directly.** The URL format matches how
-   AIGatewayRuntimeEngine calls connectors:
+2. **Build the `dynamicInvoke` payload.** The request object supports:
+   - `method` — HTTP method (GET, POST, PUT, DELETE)
+   - `path` — operation path from Swagger (strip the `/{connectionId}` prefix)
+   - `queries` — query parameters as key-value dict
+   - `body` — request body (string or object, depending on operation)
+   - `headers` — HTTP headers (**except** `Content-*` headers which are rejected)
 
-   ```
-   {method} {connectionRuntimeUrl}/{path}?{queries}
+   Map Swagger parameter locations:
+   - `in: path` → substitute into the `path` string
+   - `in: query` → add to `queries` dict
+   - `in: body` → set as `body`
+   - `in: header` → add to `headers` (**except** `Content-*`)
 
-   Headers:
-     Authorization: Bearer {access_token}
-     Content-Type: application/json
-   ```
+3. **Call `invoke_dynamic` with the `request` format:**
 
-   Build the request payload from the Swagger operation definition:
-   - **Path params** (`in: path`) → substituted into the URL path
-   - **Query params** (`in: query`) → appended as query string
-   - **Body params** (`in: body`) → sent as JSON request body
-   - **Header params** (`in: header`) → added as HTTP headers
-
-   Example using the `request` format via `invoke_dynamic`:
    ```python
-   # Option A: By operation ID (gateway resolves path/method from Swagger)
+   # Example: List root folders (GET, no body)
    result = conn_client.invoke_dynamic(gateway_name, connection_name,
-       operation_id="SendMailV2",
-       parameters={
-           "emailMessage": {
-               "To": "newhire@contoso.com",
-               "Subject": "Welcome!",
-               "Body": "<p>Welcome to the team!</p>",
-           }
-       })
-
-   # Option B: By raw HTTP method + path (matches runtime URL pattern directly)
-   result = conn_client.invoke_dynamic(gateway_name, connection_name,
-       method="POST", path="/v2/Mail")
+       method="GET",
+       path="/datasets/default/rootfolders")
+   folders = result['response']['body']
    ```
 
-   Or call the runtime URL directly with `httpx`/`requests` from inside
-   a sandbox (matching AIGatewayRuntimeEngine payload format):
+   For operations that need queries or body, call the ARM endpoint directly
+   since the SDK's `invoke_dynamic` only passes `method` and `path`:
+
    ```python
    import httpx
-   from azure.identity import ManagedIdentityCredential
+   from azure.identity import AzureCliCredential
 
-   credential = ManagedIdentityCredential()
-   token = credential.get_token("https://apihub.azure.com/.default").token
+   credential = AzureCliCredential()
+   token = credential.get_token("https://management.azure.com/.default").token
 
-   # URL = {connectionRuntimeUrl}/{operationPath}
-   url = f"{runtime_url}/v2/Mail/send"
+   arm_url = (
+       f"https://management.azure.com/subscriptions/{subscription_id}"
+       f"/resourceGroups/{resource_group}"
+       f"/providers/Microsoft.Web/connectorGateways/{gateway_name}"
+       f"/connections/{connection_name}/dynamicInvoke"
+       f"?api-version=2026-05-01-preview"
+   )
 
-   response = httpx.post(url,
-       headers={
-           "Authorization": f"Bearer {token}",
-           "Content-Type": "application/json",
-       },
-       json={
-           "emailMessage": {
-               "To": "newhire@contoso.com",
-               "Subject": "Welcome!",
-               "Body": "<p>Welcome to the team!</p>",
-           }
-       })
-   print(response.status_code, response.json())
+   # Example: Create a file in OneDrive
+   payload = {
+       "request": {
+           "method": "POST",
+           "path": "/datasets/default/files",
+           "queries": {
+               "folderPath": "/",
+               "name": "hello.txt"
+           },
+           "body": "Hello from Connector Gateway!"
+       }
+   }
+
+   response = httpx.post(arm_url,
+       headers={"Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"},
+       json=payload, timeout=60)
+
+   result = response.json()
+   file_info = result['response']['body']
+   print(f"Created: {file_info['Name']} at {file_info['Path']}")
+   ```
+
+   The response wraps the connector's response:
+   ```json
+   {"response": {"statusCode": "OK", "body": {...}, "headers": {...}}}
    ```
 
 4. If running from a **sandbox**, configure egress and access policy:
    ```python
-   # Egress policy must allow: *.connectorgateway.azure.com, login.microsoftonline.com
-
    # Grant sandbox managed identity access to the connection
    conn_client.create_access_policy(gateway_name, connection_name,
        principal_id=sandbox_principal_id,
        tenant_id=sandbox_tenant_id,
        location=gateway_location)
    ```
+   For direct runtime URL calls from a sandbox (bypassing ARM), the sandbox
+   egress must also allow `*.connectorgateway.azure.com` and `login.microsoftonline.com`.
 
 **→ Skip to Final verification checklist (Direct API).**
 
@@ -471,6 +476,12 @@ Run `az connectorgateway --help` to see all available commands.
 | Port auth for InvokePort | Add gateway's principalId to the port's entraId objectIds on the sandbox |
 | Cleanup order | Delete trigger config → connection → sandbox → gateway |
 | SandboxGroupNotFound 404 | Data plane needs time after ARM sandbox group creation. Retry `create_sandbox` with backoff (10-60s waits, up to 6 attempts) |
+| `dynamicInvoke` 400: `parameters` not valid | Use `{"request": {"method": ..., "path": ...}}` format, NOT `{"parameters": {"operationId": ...}}`. The operationId format is not supported by this endpoint |
+| `dynamicInvoke` 400: `Content-*` headers not supported | Do NOT include `Content-Type` or other `Content-*` headers in the request object — the API rejects them |
+| `dynamicInvoke` returns `NotFound` for POST | Ensure you pass `queries` and `body` in the request object. The SDK's `invoke_dynamic(method, path)` only sends method+path — for operations needing queries/body, call the ARM endpoint directly with `httpx` |
+| `list_operations` AttributeError | Use `conn_client.get_swagger_operations(gateway, connector_name)` not `list_operations` |
+| Runtime URL 403: missing connection ACL | Create an access policy granting the caller's principalId access to the connection before calling the runtime URL directly |
+| Swagger paths include `/{connectionId}/...` | Strip the `/{connectionId}` prefix when building `dynamicInvoke` paths — the connection context is already set by the endpoint |
 
 ## Labs
 
