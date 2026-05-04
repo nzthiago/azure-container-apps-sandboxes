@@ -270,25 +270,51 @@ No trigger config needed.
 Ask the user:
 - "Do you have an existing sandbox, or should I create a new one?"
 - If **existing**: ask for sandbox ID + sandbox group name.
-- If **new**: create a sandbox group and sandbox. **Important:** after creating the
-  sandbox group via ARM, the data plane needs time to register it. Use a retry loop
-  with backoff when calling `create_sandbox`:
+- If **new**: **Prefer reusing an existing sandbox group** — list available groups
+  with `client.list_groups()` and offer them as choices. Creating a new sandbox group
+  requires data plane propagation that can take **5–20+ minutes** in some regions.
+
+  If a new group is truly needed:
   ```python
-  group = mgmt.create_group(sandbox_group_name, location=location)
-  for attempt in range(6):
+  group = client.create_group(sandbox_group_name, location=location,
+      identity={"type": "SystemAssigned"})
+  group_principal_id = group.get("identity", {}).get("principalId")
+  ```
+
+  Then create the sandbox with aggressive retry (propagation can take 5-20 min):
+  ```python
+  import time
+  for attempt in range(12):
       try:
-          sbx = sbx_client.create_sandbox(sandbox_group_name, disk='ubuntu')
+          sbx = client.create_sandbox(sandbox_group_name, disk='ubuntu')
           sandbox_id = sbx['id']
           break
       except Exception as e:
-          if attempt < 5 and 'SandboxGroupNotFound' in str(e):
-              wait = (attempt + 1) * 10
-              print(f'Waiting {wait}s for sandbox group to propagate...')
+          if attempt < 11 and 'SandboxGroupNotFound' in str(e):
+              wait = 30 + (attempt * 10)  # 30s, 40s, 50s, ... up to 140s
+              print(f'Waiting {wait}s for sandbox group to propagate (attempt {attempt+1}/12)...')
               time.sleep(wait)
           else:
               raise
   ```
-  Then wait for Running state.
+
+  Wait for Running state — note state is at **top level** `sbx['state']`, NOT `properties.state`:
+  ```python
+  for i in range(18):
+      sbx = client.get_sandbox(sandbox_id, sandbox_group_name)
+      state = sbx.get('state', '?')  # NOT sbx['properties']['state']
+      print(f'Sandbox state: {state}')
+      if state == 'Running':
+          break
+      time.sleep(10)
+  ```
+
+  > **⚠️ Identity (principalId) is on the sandbox GROUP, not individual sandboxes.**
+  > Use `group['identity']['principalId']` for access policies.
+  > If the group was created without identity, patch it:
+  > ```python
+  > client.patch_group_identity(sandbox_group_name, {"type": "SystemAssigned"})
+  > ```
 - Ask for the **callback type**:
   - **ShellCommand** — run a shell command when the trigger fires (e.g., `python /app/handler.py`)
   - **ExecuteCommand** — run a command directly without a shell (e.g., `python` with args)
@@ -508,7 +534,9 @@ Run `az connectorgateway --help` to see all available commands.
 | Sandbox must be Running | For InvokePort targets, sandbox must be running; for ShellCommand, sandbox activates on demand |
 | Port auth for InvokePort | Add gateway's principalId to the port's entraId objectIds on the sandbox |
 | Cleanup order | Delete trigger config → connection → sandbox → gateway |
-| SandboxGroupNotFound 404 | Data plane needs time after ARM sandbox group creation. Retry `create_sandbox` with backoff (10-60s waits, up to 6 attempts) |
+| SandboxGroupNotFound 404 | Data plane propagation after ARM group creation can take **5–20+ minutes** in some regions (especially `brazilsouth`). Use retry with 30-140s waits, up to 12 attempts. **Better: reuse existing sandbox groups** — `client.list_groups()` to find propagated groups |
+| Sandbox state field wrong path | State is at `sbx['state']` (top level), NOT `sbx['properties']['state']` — the data plane API returns flat JSON |
+| Sandbox identity not found | Identity (principalId/tenantId) is on the **sandbox group**, not individual sandboxes. Use `group['identity']['principalId']`. Create group with `identity={"type": "SystemAssigned"}` |
 | `dynamicInvoke` 400: `parameters` not valid | Use `{"request": {"method": ..., "path": ...}}` format, NOT `{"parameters": {"operationId": ...}}`. The operationId format is not supported by this endpoint |
 | `dynamicInvoke` 400: `Content-*` headers not supported | Do NOT include `Content-Type` or other `Content-*` headers in the request object — the API rejects them |
 | `dynamicInvoke` returns `NotFound` for POST | Ensure you pass `queries` and `body` in the request object. The SDK's `invoke_dynamic(method, path)` only sends method+path — for operations needing queries/body, call the ARM endpoint directly with `httpx` |
