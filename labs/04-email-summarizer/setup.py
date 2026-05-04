@@ -179,9 +179,20 @@ def main():
         sandbox_id = sandboxes[0]['id']
         print(f'Sandbox: {sandbox_id} (existing)')
     else:
-        sbx = sbx_client.create_sandbox(sandbox_group_name, disk='ubuntu')
-        sandbox_id = sbx['id']
-        print(f'Sandbox: {sandbox_id} (created)')
+        # Retry with backoff — data plane needs time to register the new group
+        for attempt in range(6):
+            try:
+                sbx = sbx_client.create_sandbox(sandbox_group_name, disk='ubuntu')
+                sandbox_id = sbx['id']
+                print(f'Sandbox: {sandbox_id} (created)')
+                break
+            except Exception as e:
+                if attempt < 5 and 'SandboxGroupNotFound' in str(e):
+                    wait = (attempt + 1) * 10
+                    print(f'  Waiting {wait}s for sandbox group to propagate...')
+                    time.sleep(wait)
+                else:
+                    raise
 
     print('Waiting for sandbox to be Running...')
     resumed = False
