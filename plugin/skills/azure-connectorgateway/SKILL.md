@@ -69,10 +69,12 @@ Ask the user:
   conn_client.create_connection(gateway_name, connection_name,
       connector_name='office365')
   ```
-- Generate and show the consent URL:
+- Generate the consent URL and **open it automatically** in the user's browser:
   ```python
+  import webbrowser
   link = conn_client.generate_consent_link(gateway_name, connection_name)
-  print(f"Please authenticate here: {link}")
+  webbrowser.open(link)
+  print(f"Opening browser for authentication: {link}")
   ```
 - **Wait for the user to confirm** they have completed authentication.
 - Then verify:
