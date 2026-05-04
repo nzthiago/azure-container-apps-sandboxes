@@ -114,7 +114,25 @@ Ask the user:
 Ask the user:
 - "Do you have an existing sandbox, or should I create a new one?"
 - If **existing**: ask for sandbox ID + sandbox group name.
-- If **new**: create a sandbox group and sandbox, wait for Running state.
+- If **new**: create a sandbox group and sandbox. **Important:** after creating the
+  sandbox group via ARM, the data plane needs time to register it. Use a retry loop
+  with backoff when calling `create_sandbox`:
+  ```python
+  group = mgmt.create_group(sandbox_group_name, location=location)
+  for attempt in range(6):
+      try:
+          sbx = sbx_client.create_sandbox(sandbox_group_name, disk='ubuntu')
+          sandbox_id = sbx['id']
+          break
+      except Exception as e:
+          if attempt < 5 and 'SandboxGroupNotFound' in str(e):
+              wait = (attempt + 1) * 10
+              print(f'Waiting {wait}s for sandbox group to propagate...')
+              time.sleep(wait)
+          else:
+              raise
+  ```
+  Then wait for Running state.
 - Ask for the **callback type**:
   - **ShellCommand** — run a shell command when the trigger fires (e.g., `python /app/handler.py`)
   - **ExecuteCommand** — run a command directly without a shell (e.g., `python` with args)
@@ -325,6 +343,7 @@ Run `az connectorgateway --help` to see all available commands.
 | Sandbox must be Running | For InvokePort targets, sandbox must be running; for ShellCommand, sandbox activates on demand |
 | Port auth for InvokePort | Add gateway's principalId to the port's entraId objectIds on the sandbox |
 | Cleanup order | Delete trigger config → connection → sandbox → gateway |
+| SandboxGroupNotFound 404 | Data plane needs time after ARM sandbox group creation. Retry `create_sandbox` with backoff (10-60s waits, up to 6 attempts) |
 
 ## Labs
 
