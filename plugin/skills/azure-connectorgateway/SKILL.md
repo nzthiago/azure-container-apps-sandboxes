@@ -357,15 +357,18 @@ Ask the user:
   sbx_client.add_port(sandbox_id, sandbox_group_name, 5000,
       entra_id_object_ids=[gw_principal_id])
   ```
-- **If ShellCommand or ExecuteCommand**: grant the gateway MI **Contributor** role
-  on the sandbox group so it can call `executeShellCommand`/`executeCommand`:
+- **If ShellCommand or ExecuteCommand**: grant the gateway MI the
+  **"Dev Compute SandboxGroup Data Owner"** role (`c24cf47c-5077-412d-a19c-45202126392c`)
+  on the sandbox group. This is the least-privilege data plane role that grants
+  `sandboxes/exec/action`:
   ```bash
   az role assignment create \
     --assignee-object-id {gw_principal_id} \
     --assignee-principal-type ServicePrincipal \
-    --role "Contributor" \
+    --role "c24cf47c-5077-412d-a19c-45202126392c" \
     --scope "/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.App/sandboxGroups/{sg}"
   ```
+  > **⚠️ Do NOT use Contributor.** Use the scoped data plane role above.
   Without this, the callback returns **403**.
 
 ### Step 9B: Verify trigger is active
@@ -553,7 +556,7 @@ Run `az connectorgateway --help` to see all available commands.
 | `list_operations` AttributeError | Use `conn_client.get_swagger_operations(gateway, connector_name)` not `list_operations` |
 | Runtime URL 403: missing connection ACL | Create an access policy granting the caller's principalId access to the connection before calling the runtime URL directly |
 | Swagger paths include `/{connectionId}/...` | Strip the `/{connectionId}` prefix when building `dynamicInvoke` paths — the connection context is already set by the endpoint |
-| ShellCommand trigger 403 on callback | Gateway MI needs **Contributor** role on the sandbox group. Use `az role assignment create --assignee-object-id {gw_principal_id} --role Contributor --scope {sandbox_group_resource_id}` |
+| ShellCommand trigger 403 on callback | Gateway MI needs **"Dev Compute SandboxGroup Data Owner"** role (`c24cf47c-5077-412d-a19c-45202126392c`) on the sandbox group. Do NOT use Contributor — use this least-privilege data plane role |
 
 ## Labs
 
