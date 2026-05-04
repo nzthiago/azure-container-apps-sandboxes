@@ -13,13 +13,11 @@
 
 ```bash
 # ACA CLI
-npm install -g @azure/aca-cli
+npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-containerapps-cli-1.0.0-beta.1.tgz
 
 # From GitHub Release (SDK)
-gh release download --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_sandbox-*-py3-none-any.whl" --dir /tmp
-pip install /tmp/azure_sandbox-*-py3-none-any.whl
-gh release download --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_mgmt_sandbox-*-py3-none-any.whl" --dir /tmp
-pip install /tmp/azure_mgmt_sandbox-*-py3-none-any.whl
+gh release download --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_containerapps_sandbox-*-py3-none-any.whl" --dir /tmp
+pip install /tmp/azure_containerapps_sandbox-*-py3-none-any.whl
 ```
 
 ## Azure Setup (one-time)

@@ -10,7 +10,7 @@ snapshot/resume, and scale-to-zero. Learn more in the [README](../README.md).
 
 ```bash
 # Install SDKs
-pip install azure-sandbox azure-mgmt-sandbox
+pip install azure-containerapps-sandbox
 
 # Open any notebook in VS Code and run step by step
 ```
@@ -23,5 +23,5 @@ For the Durable Task Workflows lab only, also install the official `az durableta
 |-----|----------|---------------|
 | Getting Started | [01-getting-started.ipynb](01-sandbox-getting-started/01-getting-started.ipynb) | Full lifecycle: group + sandbox + exec + port + snapshot + stop + resume |
 | Deploy Web App | [02-deploy-web-app.ipynb](01-sandbox-getting-started/02-deploy-web-app.ipynb) | Upload code, start server, expose port, test public URL |
-| Copilot CLI (BYOK) | [03-copilot-cli.ipynb](01-sandbox-getting-started/03-copilot-cli.ipynb) | BYOK Azure OpenAI, zero-trust egress, offline mode, SSH |
+| Copilot CLI (BYOK) | [03-copilot-cli.ipynb](01-sandbox-getting-started/03-copilot-cli.ipynb) | BYOK Azure OpenAI, zero-trust egress, offline mode |
 | Durable Task Workflows | [01-orchestrate-sandbox-jobs.ipynb](02-durable-task-workflows/01-orchestrate-sandbox-jobs.ipynb) | Sample DTS orchestration for sandbox jobs; use the official `az durabletask` extension for scheduler and task hub lifecycle |
