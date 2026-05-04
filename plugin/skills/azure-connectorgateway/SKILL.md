@@ -76,13 +76,16 @@ Ask the user:
   webbrowser.open(link)
   print(f"Opening browser for authentication: {link}")
   ```
-- **Wait for the user to confirm** they have completed authentication.
-- Then verify:
+- **Ask the user**: "Have you completed the authentication in the browser?"
+  Use `ask_user` with choices like `["Yes, I've authenticated", "Not yet"]`.
+  Do NOT proceed until the user confirms.
+- Then verify the connection status:
   ```python
   conn = conn_client.get_connection(gateway_name, connection_name)
   status = conn['properties']['statuses'][0]['status']
   # Should be 'Connected'
   ```
+  If status is not `Connected`, inform the user and ask them to retry authentication.
 
 ### Step 4: Choose integration pattern
 Ask the user:
