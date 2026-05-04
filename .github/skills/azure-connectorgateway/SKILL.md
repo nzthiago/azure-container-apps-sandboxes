@@ -82,7 +82,125 @@ Ask the user:
   # Should be 'Connected'
   ```
 
-### Step 4: Discover trigger operations
+### Step 4: Choose integration pattern
+Ask the user:
+- "How do you want to use this connection?"
+  - **A) Direct API calls** — your app calls connector operations on demand
+    (e.g., send email, read SharePoint list, create OneDrive file)
+  - **B) Event-driven triggers** — the gateway pushes notifications to your
+    sandbox when events happen (e.g., new email arrives, list item created)
+
+**Stop and wait for the user's answer before continuing.**
+
+- If **A (Direct API calls)** → go to **Step 5A**
+- If **B (Event-driven triggers)** → go to **Step 5B**
+
+---
+
+### Step 5A: Direct API calls via connection runtime URL
+
+The connection's `connectionRuntimeUrl` is a gateway-managed endpoint. Your app
+calls it **directly** with the operation's HTTP method, path, and parameters —
+the gateway injects the stored OAuth credentials and forwards to the connector.
+No trigger config needed.
+
+1. Get the connection runtime URL:
+   ```python
+   conn = conn_client.get_connection(gateway_name, connection_name)
+   runtime_url = conn['properties']['connectionRuntimeUrl']
+   print(f"Runtime URL: {runtime_url}")
+   ```
+
+2. Discover available operations — get the connector's Swagger to find operation
+   paths, methods, and parameters:
+   ```python
+   ops = conn_client.list_operations(gateway_name, connector_name)
+   for op in ops:
+       print(f"  • {op['operationId']}: {op.get('summary', '')}  [{op.get('method','?').upper()} {op.get('path','')}]")
+   ```
+   Present the operations to the user. Common ones:
+   - Office 365: `SendMailV2`, `GetEmails`, `GetEvents`
+   - SharePoint: `GetItems`, `PostItem`, `PatchItem`
+   - OneDrive: `CreateFile`, `GetFileContent`, `ListFolder`
+
+3. **Call the connection runtime URL directly.** The URL format matches how
+   AIGatewayRuntimeEngine calls connectors:
+
+   ```
+   {method} {connectionRuntimeUrl}/{path}?{queries}
+
+   Headers:
+     Authorization: Bearer {access_token}
+     Content-Type: application/json
+   ```
+
+   Build the request payload from the Swagger operation definition:
+   - **Path params** (`in: path`) → substituted into the URL path
+   - **Query params** (`in: query`) → appended as query string
+   - **Body params** (`in: body`) → sent as JSON request body
+   - **Header params** (`in: header`) → added as HTTP headers
+
+   Example using the `request` format via `invoke_dynamic`:
+   ```python
+   # Option A: By operation ID (gateway resolves path/method from Swagger)
+   result = conn_client.invoke_dynamic(gateway_name, connection_name,
+       operation_id="SendMailV2",
+       parameters={
+           "emailMessage": {
+               "To": "newhire@contoso.com",
+               "Subject": "Welcome!",
+               "Body": "<p>Welcome to the team!</p>",
+           }
+       })
+
+   # Option B: By raw HTTP method + path (matches runtime URL pattern directly)
+   result = conn_client.invoke_dynamic(gateway_name, connection_name,
+       method="POST", path="/v2/Mail")
+   ```
+
+   Or call the runtime URL directly with `httpx`/`requests` from inside
+   a sandbox (matching AIGatewayRuntimeEngine payload format):
+   ```python
+   import httpx
+   from azure.identity import ManagedIdentityCredential
+
+   credential = ManagedIdentityCredential()
+   token = credential.get_token("https://apihub.azure.com/.default").token
+
+   # URL = {connectionRuntimeUrl}/{operationPath}
+   url = f"{runtime_url}/v2/Mail/send"
+
+   response = httpx.post(url,
+       headers={
+           "Authorization": f"Bearer {token}",
+           "Content-Type": "application/json",
+       },
+       json={
+           "emailMessage": {
+               "To": "newhire@contoso.com",
+               "Subject": "Welcome!",
+               "Body": "<p>Welcome to the team!</p>",
+           }
+       })
+   print(response.status_code, response.json())
+   ```
+
+4. If running from a **sandbox**, configure egress and access policy:
+   ```python
+   # Egress policy must allow: *.connectorgateway.azure.com, login.microsoftonline.com
+
+   # Grant sandbox managed identity access to the connection
+   conn_client.create_access_policy(gateway_name, connection_name,
+       principal_id=sandbox_principal_id,
+       tenant_id=sandbox_tenant_id,
+       location=gateway_location)
+   ```
+
+**→ Skip to Final verification checklist (Direct API).**
+
+---
+
+### Step 5B: Discover trigger operations
 - List available trigger operations for the connector:
   ```python
   ops = trigger_client.list_trigger_operations(gateway_name, 'office365')
@@ -94,7 +212,7 @@ Ask the user:
 
 **Stop and wait for the user's selection before continuing.**
 
-### Step 5: Collect trigger parameters
+### Step 6B: Collect trigger parameters
 - Based on the selected operation, ask the user for required parameters.
 - Common examples:
   - Email trigger: `folderPath` (Inbox), `subjectFilter` (optional)
@@ -110,7 +228,7 @@ Ask the user:
 
 **Stop and wait for the user's answers before continuing.**
 
-### Step 6: Sandbox target
+### Step 7B: Sandbox target (triggers)
 Ask the user:
 - "Do you have an existing sandbox, or should I create a new one?"
 - If **existing**: ask for sandbox ID + sandbox group name.
@@ -140,7 +258,7 @@ Ask the user:
 
 **Stop and wait for the user's selection before continuing.**
 
-### Step 7: Create trigger config + access policy
+### Step 8B: Create trigger config + access policy
 - Create the trigger config:
   ```python
   # For InvokePort target:
@@ -176,7 +294,7 @@ Ask the user:
       entra_id_object_ids=[gw_principal_id])
   ```
 
-### Step 8: Verify trigger is active
+### Step 9B: Verify trigger is active
 - Check the trigger state:
   ```python
   tc = trigger_client.get_trigger(gateway_name, trigger_config_name)
@@ -186,7 +304,16 @@ Ask the user:
 - If not enabled, wait a moment and re-check.
 
 ### Final verification checklist
-Before declaring setup complete, confirm:
+
+**For Direct API calls (path A):**
+- ✅ Gateway exists
+- ✅ Connection exists and status is `Connected`
+- ✅ `connectionRuntimeUrl` is available (not empty)
+- ✅ Access policy exists (sandbox MI → connection) if running from sandbox
+- ✅ Sandbox egress allows `*.connectorgateway.azure.com` and `login.microsoftonline.com`
+- ✅ Test call to runtime URL returns expected data
+
+**For Event-driven triggers (path B):**
 - ✅ Gateway exists with SystemAssigned identity
 - ✅ Connection exists and status is `Connected`
 - ✅ Trigger config exists and state is `Enabled`
