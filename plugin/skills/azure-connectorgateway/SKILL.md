@@ -114,26 +114,44 @@ No trigger config needed.
 
 > **⚠️ Do NOT include `Content-*` headers** in the request object — the API rejects them.
 
-1. Discover available operations from the connector's Swagger:
+1. **Automatically select the operation** based on the user's stated goal:
    ```python
    ops = conn_client.get_swagger_operations(gateway_name, connector_name)
-   for op in ops:
-       print(f"  • {op['operationId']}: {op.get('summary', '')}  "
-             f"[{op.get('method','?').upper()} {op.get('path','')}]")
    ```
-   Present the operations to the user as numbered choices. Common ones:
-   - Office 365: `SendMailV2`, `GetEmails`, `GetEvents`
-   - SharePoint: `GetItems`, `PostItem`, `PatchItem`
-   - OneDrive: `CreateFile`, `GetFileContent`, `ListFolder`
+   Match the user's intent to the best operation (e.g., "send a message to Teams"
+   → `PostMessageToConversation` or `PostMessage`; "create a file" → `CreateFile`).
+   Do NOT list all operations for the user to pick from — choose the right one yourself.
 
-   **Stop and wait for the user to select which operation they want to call.**
+   If ambiguous (multiple operations could match), ask the user to clarify with
+   specific choices describing the difference (e.g., "Post to a channel" vs "Post in a chat").
 
-   Once selected, show the operation's parameters (from Swagger) and ask the user
-   for the required values (e.g., folder path, file name, email recipient, etc.).
+2. **Collect parameter values interactively.** Inspect the selected operation's
+   parameters from the Swagger definition:
+   ```python
+   selected_op = next(op for op in ops if op['operationId'] == chosen_operation_id)
+   params = selected_op.get('parameters', [])
+   ```
+
+   For each **required** parameter:
+   - If the parameter has **dynamic values** (indicated by `x-ms-dynamic-values` or
+     `x-ms-dynamic-list` in the Swagger), fetch the dynamic values using `dynamicInvoke`
+     and present them as choices to the user:
+     ```python
+     # Example: fetch Teams/channels dynamically
+     result = conn_client.invoke_dynamic(gateway_name, connection_name,
+         method="GET", path="/beta/teams")
+     items = result['response']['body']['value']
+     # Present as choices: ["Team A", "Team B", ...]
+     ```
+     Use `ask_user` with the fetched values as `choices`.
+   - If the parameter has a **static enum** in the Swagger schema, present those
+     values as choices.
+   - If the parameter is **free-form** (string, number, etc.), ask the user to
+     provide the value directly.
 
    **Stop and wait for the user's parameter values before continuing.**
 
-2. **Build the `dynamicInvoke` payload.** The request object supports:
+3. **Build the `dynamicInvoke` payload.** The request object supports:
    - `method` — HTTP method (GET, POST, PUT, DELETE)
    - `path` — operation path from Swagger (strip the `/{connectionId}` prefix)
    - `queries` — query parameters as key-value dict
