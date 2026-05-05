@@ -75,9 +75,15 @@ from azure.containerapps.sandbox import SandboxClient, SandboxGroupClient
 
 client = SandboxClient(resource_group="my-rg")
 mgmt = SandboxGroupClient(resource_group="my-rg")
-```
 
-Run `help(client)` and `help(mgmt)` to see all available methods.
+# Create a sandbox
+sbx = client.create_sandbox("my-group", disk="ubuntu")
+print(sbx.id, sbx.state)
+
+# Execute a command
+result = client.exec(sbx.id, "my-group", "echo hello")
+print(result.exit_code, result.stdout)
+```
 
 ## Portal
 

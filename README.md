@@ -1,4 +1,4 @@
-# Azure Sandboxes
+# Azure Sandboxes (Preview)
 
 Azure Container Apps Sandboxes is a first-class resource type in Azure Container Apps that provides fast, secure, ephemeral compute environments with built-in suspend and resume capabilities. Sandboxes join the Container Apps family alongside Apps, Jobs, and Dynamic Sessions as a foundational building block for the next generation of cloud workloads.
 
@@ -75,6 +75,17 @@ from azure.containerapps.sandbox import SandboxClient, SandboxGroupClient
 
 client = SandboxClient(resource_group="my-rg")
 mgmt = SandboxGroupClient(resource_group="my-rg")
+
+# Create a sandbox
+sbx = client.create_sandbox("my-group", disk="ubuntu")
+print(sbx.id, sbx.state)
+
+# Execute a command
+result = client.exec(sbx.id, "my-group", "echo hello")
+print(result.exit_code, result.stdout)
+
+# Clean up
+client.delete_sandbox(sbx.id, "my-group")
 ```
 
 Use `mgmt` (`SandboxGroupClient`) for sandbox group operations (create/delete groups) and `client` for sandbox operations (create, exec, files, ports, snapshots, etc.). For end-to-end examples, see the notebooks in [`labs/`](labs/).
@@ -122,14 +133,6 @@ Labs live in `labs/<topic>/` as Jupyter notebooks (`.ipynb`). Each lab should:
 - Use `SandboxClient` and `SandboxGroupClient` from the current SDK
 
 To add a new lab, create a directory under `labs/`, add your notebooks, and update [`labs/README.md`](labs/README.md).
-
-## Release
-
-Release upload workflow: [`scripts/release.sh`](scripts/release.sh)
-
-```bash
-./scripts/release.sh v0.1.0b1 /path/to/dist
-```
 
 ## Links
 

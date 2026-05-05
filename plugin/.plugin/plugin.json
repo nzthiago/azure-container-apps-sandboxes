@@ -1,6 +1,6 @@
 {
   "name": "azure-container-apps",
-  "description": "Azure sandbox plugins marketplace — skills for sandbox groups, sandboxes, exec, shell, files, ports, egress, images, and snapshots.",
+  "description": "Azure Container Appssandbox plugins marketplace — skills for sandbox groups, sandboxes, exec, shell, files, ports, egress, images, and snapshots.",
   "version": "0.3.0",
   "author": {
     "name": "Microsoft",
