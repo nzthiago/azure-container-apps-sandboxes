@@ -1,4 +1,4 @@
-# Azure Sandboxes
+# Azure Sandboxes (Preview)
 
 Azure Container Apps Sandboxes is a first-class resource type in Azure Container Apps that provides fast, secure, ephemeral compute environments with built-in suspend and resume capabilities. Sandboxes join the Container Apps family alongside Apps, Jobs, and Dynamic Sessions as a foundational building block for the next generation of cloud workloads.
 
@@ -32,7 +32,7 @@ This repo contains developer tools, plugins, and tutorials for ACA Sandboxes:
 
 - **Plugin Store** — Copilot CLI and Claude Code plugins with the `azure-sandbox` skill
 - **Labs** — Hands-on Jupyter notebook tutorials, including a Durable Task Scheduler (DTS) sample pattern for sandbox workflows
-- **Release artifacts** — Python SDK and CLI extension wheels published through GitHub Releases
+- **Release artifacts** — Python SDK wheels and ACA CLI npm package published through GitHub Releases
 
 ## Install
 
@@ -41,7 +41,7 @@ This repo contains developer tools, plugins, and tutorials for ACA Sandboxes:
 ```bash
 # Copilot CLI — add the marketplace, then install the sandbox skill
 /plugin marketplace add Azure-Samples/azure-container-apps-sandboxes
-/plugin install azure-sandbox@Azure-Container-Apps
+/plugin install azure-sandbox@azure-container-apps
 
 # Claude Code
 claude plugin add Azure-Samples/azure-container-apps-sandboxes
@@ -51,43 +51,50 @@ claude plugin add Azure-Samples/azure-container-apps-sandboxes
 
 ```bash
 # From GitHub Release
-gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_sandbox-*.whl" --dir /tmp
-gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_mgmt_sandbox-*.whl" --dir /tmp
-pip install /tmp/azure_sandbox-*.whl /tmp/azure_mgmt_sandbox-*.whl
+gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_containerapps_sandbox-*.whl" --dir /tmp
+pip install /tmp/azure_containerapps_sandbox-*.whl
 ```
 
-### az CLI Extension
+### ACA CLI
 
 ```bash
-# From GitHub Release
-gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern "az_cli_sandbox-*.whl" --dir /tmp
-az extension add --source /tmp/az_cli_sandbox-*.whl
+npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-containerapps-cli-1.0.0-beta.1.tgz
 ```
 
 ### Uninstall
 
 ```bash
-az extension remove --name sandbox
-pip uninstall azure-sandbox azure-mgmt-sandbox
+npm uninstall -g @azure/containerapps-cli
+pip uninstall azure-containerapps-sandbox
 ```
 
 ## SDK Usage
 
 ```python
-from azure.sandbox import SandboxClient
-from azure.mgmt.sandbox import SandboxGroupManagementClient
+from azure.containerapps.sandbox import SandboxClient, SandboxGroupClient
 
 client = SandboxClient(resource_group="my-rg")
-mgmt = SandboxGroupManagementClient(resource_group="my-rg")
+mgmt = SandboxGroupClient(resource_group="my-rg")
+
+# Create a sandbox
+sbx = client.create_sandbox("my-group", disk="ubuntu")
+print(sbx.id, sbx.state)
+
+# Execute a command
+result = client.exec(sbx.id, "my-group", "echo hello")
+print(result.exit_code, result.stdout)
+
+# Clean up
+client.delete_sandbox(sbx.id, "my-group")
 ```
 
-Use `mgmt` for sandbox group operations (create/delete groups) and `client` for sandbox operations (create, exec, files, ports, snapshots, etc.). For end-to-end examples, see the notebooks in [`labs/`](labs/).
+Use `mgmt` (`SandboxGroupClient`) for sandbox group operations (create/delete groups) and `client` for sandbox operations (create, exec, files, ports, snapshots, etc.). For end-to-end examples, see the notebooks in [`labs/`](labs/).
 
 ## Skills
 
 | Skill | Description |
 |-------|-------------|
-| [azure-sandbox](plugin/skills/azure-sandbox/SKILL.md) | Manage sandbox groups and sandboxes — create, exec, SSH, files, ports, egress, images, snapshots, stop/resume |
+| [azure-sandbox](plugin/skills/azure-sandbox/SKILL.md) | Manage sandbox groups and sandboxes — create, exec, shell, files, ports, egress, images, snapshots, stop/resume |
 
 ## Labs
 
@@ -95,7 +102,7 @@ Use `mgmt` for sandbox group operations (create/delete groups) and `client` for 
 |-----|----------|----------------|
 | Getting Started | [01-getting-started.ipynb](labs/01-sandbox-getting-started/01-getting-started.ipynb) | Full lifecycle: group → sandbox → exec → files → port → snapshot → stop → resume → cleanup |
 | Deploy Web App | [02-deploy-web-app.ipynb](labs/01-sandbox-getting-started/02-deploy-web-app.ipynb) | Upload code, start server, expose port, test public URL |
-| Copilot CLI (BYOK) | [03-copilot-cli.ipynb](labs/01-sandbox-getting-started/03-copilot-cli.ipynb) | BYOK Azure OpenAI, zero-trust egress, offline mode, SSH |
+| Copilot CLI (BYOK) | [03-copilot-cli.ipynb](labs/01-sandbox-getting-started/03-copilot-cli.ipynb) | BYOK Azure OpenAI, zero-trust egress, offline mode |
 | Durable Task Workflows | [01-orchestrate-sandbox-jobs.ipynb](labs/02-durable-task-workflows/01-orchestrate-sandbox-jobs.ipynb) | Sample DTS orchestration for sandbox jobs from Python; scheduler/task hub lifecycle stays on the official `az durabletask` extension |
 
 ## Portal
@@ -114,9 +121,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for general guidance.
 Skills live in `plugin/skills/<skill-name>/` and include:
 
 - `SKILL.md` — Skill description, install instructions, usage examples, and references
-- `scripts/` — Runnable Python scripts that demonstrate the skill end-to-end
-- `references/` — Supplementary docs (prerequisites, patterns, setup guides)
-- `assets/` — Helper files (e.g., SSH client)
+- `references/` — Supplementary docs, runbooks, and setup guides
 
 To add a new skill, create a directory under `plugin/skills/`, add a `SKILL.md` with install/usage instructions, and register it in [`marketplace.json`](marketplace.json).
 
@@ -126,17 +131,9 @@ Labs live in `labs/<topic>/` as Jupyter notebooks (`.ipynb`). Each lab should:
 
 - Be self-contained — runnable with just `az login` and the SDK installed
 - Include setup, step-by-step walkthrough, and cleanup cells
-- Use `SandboxClient` and `SandboxGroupManagementClient` from the current SDK
+- Use `SandboxClient` and `SandboxGroupClient` from the current SDK
 
 To add a new lab, create a directory under `labs/`, add your notebooks, and update [`labs/README.md`](labs/README.md).
-
-## Release
-
-Release upload workflow: [`scripts/release.sh`](scripts/release.sh)
-
-```bash
-./scripts/release.sh v0.1.0b1 /path/to/dist
-```
 
 ## Links
 
