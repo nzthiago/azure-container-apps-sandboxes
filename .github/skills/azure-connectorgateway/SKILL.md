@@ -1,24 +1,25 @@
 ---
 name: azure-connectorgateway
 description: |
-  Azure Connector Gateway — manage gateways, connections, triggers, and MCP configs.
-  Connects external services (Office 365, GitHub, Azure Blob) to sandbox actions
-  via event-driven triggers or MCP tool integrations.
+  Azure Connector Gateway — manage gateways, connections, and triggers.
+  Connects external services (Office 365, GitHub, Azure Blob) to sandbox apps
+  via event-driven triggers or direct API calls using connection runtime URLs.
   Use when:
   - Creating or managing connector gateways and connections
   - Creating or managing trigger configs on a connector gateway
   - Subscribing to connector events (email, file, webhook)
   - Wiring event sources to sandbox callbacks
   - Managing trigger lifecycle (enable, disable, delete)
-  - Setting up MCP configs for tool integration
+  - Building sandbox apps that call connector APIs (send email, upload files, etc.)
   Triggers: "create trigger", "trigger config", "webhook trigger",
-  "connector gateway", "mcp config", "connection", "email trigger"
+  "connector gateway", "connection", "email trigger", "send email",
+  "onedrive", "sharepoint"
 ---
 
 # Azure Connector Gateway
 
-Manage connector gateways, connections, triggers, and MCP configs — connect
-external services to sandbox actions (run command, call HTTP port, tool integration).
+Manage connector gateways, connections, and triggers — connect
+external services to sandbox apps (run command, call HTTP port, direct API calls).
 
 > **⚠️ Do NOT hallucinate CLI commands or API calls.**
 > Use `--help` on any command. Reference files in `references/` for details.
