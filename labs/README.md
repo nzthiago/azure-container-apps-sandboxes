@@ -13,6 +13,9 @@ snapshot/resume, and scale-to-zero. Learn more in the [README](../README.md).
 gh release download --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_containerapps_sandbox-*-py3-none-any.whl" --dir /tmp
 pip install /tmp/azure_containerapps_sandbox-*-py3-none-any.whl
 
+# Install SDKs from PyPI
+pip install azure-containerapps-sandbox
+
 # Open any notebook in VS Code and run step by step
 ```
 

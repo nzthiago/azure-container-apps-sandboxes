@@ -1,4 +1,4 @@
-# Azure Sandboxes (Preview)
+# Azure Sandboxes
 
 Azure Container Apps Sandboxes is a first-class resource type in Azure Container Apps that provides fast, secure, ephemeral compute environments with built-in suspend and resume capabilities. Sandboxes join the Container Apps family alongside Apps, Jobs, and Dynamic Sessions as a foundational building block for the next generation of cloud workloads.
 
@@ -31,7 +31,7 @@ A Sandbox is a secure, isolated compute environment that can be created, used, s
 This repo contains developer tools, plugins, and tutorials for ACA Sandboxes:
 
 - **Plugin Store** — Copilot CLI and Claude Code plugins with the `azure-sandbox` skill
-- **Labs** — Hands-on Jupyter notebook tutorials, including a Durable Task Scheduler (DTS) sample pattern for sandbox workflows
+- **Labs** — Hands-on Jupyter notebook tutorials
 - **Release artifacts** — Python SDK wheels and ACA CLI npm package published through GitHub Releases
 
 ## Install
@@ -75,17 +75,6 @@ from azure.containerapps.sandbox import SandboxClient, SandboxGroupClient
 
 client = SandboxClient(resource_group="my-rg")
 mgmt = SandboxGroupClient(resource_group="my-rg")
-
-# Create a sandbox
-sbx = client.create_sandbox("my-group", disk="ubuntu")
-print(sbx.id, sbx.state)
-
-# Execute a command
-result = client.exec(sbx.id, "my-group", "echo hello")
-print(result.exit_code, result.stdout)
-
-# Clean up
-client.delete_sandbox(sbx.id, "my-group")
 ```
 
 Use `mgmt` (`SandboxGroupClient`) for sandbox group operations (create/delete groups) and `client` for sandbox operations (create, exec, files, ports, snapshots, etc.). For end-to-end examples, see the notebooks in [`labs/`](labs/).
