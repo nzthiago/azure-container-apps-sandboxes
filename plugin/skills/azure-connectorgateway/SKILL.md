@@ -1053,6 +1053,24 @@ Ask the user:
     --port 5000 --port-path /webhook `
     --parameters '[{\"name\": \"folderPath\", \"value\": \"Inbox\"}]' -o json
   ```
+
+  > **⚠️ If `--command` fails with KeyError** (CLI bug — `command` is a reserved
+  > kwarg in az CLI core), use the **Python SDK** as a workaround:
+  > ```powershell
+  > py -3 -c "
+  > import sys, os
+  > sys.path.insert(0, os.path.expanduser('~/.azure/cliextensions/az-cli-connectorgateway'))
+  > from azure.connectorgateway import TriggerClient
+  > tc = TriggerClient(resource_group='{rg}')
+  > result = tc.create_trigger('{gw}', '{trigger_name}',
+  >     connector_name='office365', connection_name='{conn}',
+  >     operation_name='OnNewEmailV3',
+  >     sandbox_id='{sandbox_id}', sandbox_group='{sandbox_group}',
+  >     command='python /app/handler.py',
+  >     parameters=[{'name': 'folderPath', 'value': 'Inbox'}])
+  > print(result.get('name'), result.get('properties',{}).get('state'))
+  > "
+  > ```
 - Create the access policy granting the gateway MI access to the connection:
   ```powershell
   $body = @{
@@ -1284,6 +1302,7 @@ Run `az connectorgateway --help` to see all available commands.
 | `dynamicInvoke` browse fails with mangled JSON | Use `@file` pattern for `az rest --body` when IDs contain `!` or special chars. Write JSON to temp file, pass `--body @$tmpFile`. Always URL-encode IDs with `[System.Uri]::EscapeDataString()` |
 | Swagger paths include `/{connectionId}/...` | Strip the `/{connectionId}` prefix when building `dynamicInvoke` paths — the connection context is already set by the endpoint |
 | ShellCommand trigger 403 on callback | Gateway MI needs **"Dev Compute SandboxGroup Data Owner"** role (`c24cf47c-5077-412d-a19c-45202126392c`) on the sandbox group. Do NOT use Contributor — use this least-privilege data plane role |
+| `trigger create --command` KeyError | **Known CLI bug**: `az connectorgateway trigger create --command "python /app/handler.py"` fails with `KeyError: 'python /app/handler.py'` because `az CLI` core reserves the `command` kwarg. **Fix**: Update the CLI extension — in `_params.py` change `c.argument('command', ...)` to `c.argument('shell_command', options_list=['--command'], ...)` and in `custom.py` rename the parameter from `command` to `shell_command`. The fix has been applied locally. If the fix is not applied, use the **Python SDK directly** as a workaround (see below). |
 
 ## Handler Development Guide
 
