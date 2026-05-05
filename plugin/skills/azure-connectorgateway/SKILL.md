@@ -31,18 +31,20 @@ external services to sandbox actions (run command, call HTTP port, tool integrat
 > **⚠️ Do NOT generate a Jupyter notebook or one-shot automation.**
 > Walk the user through setup **interactively** — ask questions, then execute.
 
-> **🚫 Do NOT create MCP configs.** MCP configs are for AI agent tool integration
-> and are NOT needed for trigger-based apps or direct API calls. When the handler
-> needs to call a connector (e.g., read email, upload to OneDrive), it uses the
-> **connection runtime URL** directly — no MCP config needed. If you find yourself
-> running `az connectorgateway mcp-config create`, STOP — you are on the wrong path.
+> **🚫 Do NOT create MCP configs.** MCP configs wire connector operations as tools
+> for an AI agent — but apps deployed to sandboxes run **without an agent present**.
+> Whether the app is triggered by an event OR runs on-demand (e.g., "send an email"),
+> it must call the **connection runtime URL** directly using HTTP (`requests`/`urllib`).
+> The egress transform on the sandbox handles authentication automatically.
+> If you find yourself running `az connectorgateway mcp-config create`, STOP —
+> you are on the wrong path.
 
 > **⚠️ Two types of scripts — know the difference:**
 > - **Setup operations** (gateway, connections, triggers, ACLs, egress) →
 >   execute via `az` CLI directly. Do NOT create script files for setup.
-> - **App/handler scripts** (deployed to sandbox, called by triggers) →
->   DO create a Python script file. This is the user's app that calls
->   connection runtime URLs when events fire.
+> - **App/handler scripts** (deployed to sandbox, run by triggers OR on-demand) →
+>   DO create a Python script file. This app calls **connection runtime URLs**
+>   directly via HTTP — egress transform injects auth. No agent, no MCP.
 
 > **⚠️ Setup execution rules:**
 > - Use `az connectorgateway` / `az rest` / `az sandbox` commands for all setup
@@ -201,8 +203,8 @@ Ask the user:
     The handler app in the sandbox can then use **direct API calls** to fetch
     additional data or take actions (e.g., read email body, create files).
 
-> **⚠️ Do NOT create MCP configs** — they are for AI agent tool integration only.
-> For both direct API calls and trigger-based apps, use paths A or B above.
+> **⚠️ Do NOT create MCP configs** — sandbox apps run without an agent, so MCP
+> tools are useless. Both paths A and B use connection runtime URLs directly.
 
 **Stop and wait for the user's answer before continuing.**
 
@@ -216,9 +218,11 @@ Ask the user:
 Call connector operations directly through `az rest` to the ARM `dynamicInvoke` endpoint.
 The gateway injects the stored OAuth credentials and forwards to the connector.
 
-> **⚠️ Use `az rest` for `dynamicInvoke` calls — NOT the Python SDK, NOT MCP configs.**
-> `az rest` handles Azure auth automatically and avoids SDK version issues.
-> MCP configs are for AI agent tool integration — NOT for direct API calls.
+> **⚠️ Use `az rest` for `dynamicInvoke` during setup. Use connection runtime URLs in sandbox apps.**
+> During setup (this step), use `az rest` to call `dynamicInvoke` for discovering operations,
+> fetching dynamic values, and testing calls. For the actual app deployed to the sandbox,
+> call the connection runtime URL directly with `requests`/`urllib` — egress transform handles auth.
+> Do NOT use MCP configs — there is no agent in the sandbox to consume MCP tools.
 
 > **⚠️ IMPORTANT: Use the `request` format, NOT the `parameters` format.**
 > The `dynamicInvoke` API only accepts `{"request": {"method": ..., "path": ...}}`.
@@ -906,8 +910,9 @@ Ask the user:
 - ✅ If handler calls runtime URL: egress transform + sandbox MI ACL also needed (same as path A)
 
 > **🚫 After trigger creation, proceed to deploying the handler app.**
-> Do NOT create MCP configs. The handler calls connection runtime URLs directly
-> using `requests`/`urllib` with egress transform auth — no MCP config is involved.
+> Do NOT create MCP configs — the sandbox runs without an agent, so MCP tools
+> cannot be consumed. The handler calls connection runtime URLs directly
+> using `requests`/`urllib` with egress transform auth.
 
 **IMPORTANT: Do NOT skip to code generation. Walk the user through each step interactively.**
 
