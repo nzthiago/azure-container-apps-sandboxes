@@ -1118,16 +1118,22 @@ the selected values.**
 > (folder, list, channel, site, mailbox), it is a dynamic value. Fetch it
 > from the connector API and let the user choose — do NOT assume or hardcode.
 
-### ShellCommand triggers do NOT pass event data
+### How event data reaches the handler — depends on target type
 
-> **⚠️ CRITICAL**: The `executeShellCommand` callback body only contains:
-> ```json
-> {"command": "python3 /app/handler.py", "activationMode": "OnDemand"}
-> ```
-> The trigger's event data (email content, file info, etc.) is **NOT** passed to the handler.
-> The handler must **fetch the data itself** from the connection runtime URL.
+> **⚠️ CRITICAL: Know which target type you are using.**
+> The trigger's target type determines whether event data is passed to the handler.
 
-For **InvokePort** targets, the trigger event data IS included in the POST body to the port.
+| Target type | How event data is delivered | Handler approach |
+|-------------|---------------------------|-----------------|
+| **InvokePort** (`--port 8080 --port-path /webhook`) | Event data IS included in the POST body to the port | Parse the request body (e.g., Flask `request.json`) — the trigger payload contains the event data directly |
+| **ShellCommand** (`--command "python /app/handler.py"`) | Event data is **NOT** passed. Body only contains `{"command": "...", "activationMode": "OnDemand"}` | Handler must **fetch the data itself** by calling the connection runtime URL |
+| **ExecuteCommand** (`--execute-command "python"`) | Same as ShellCommand — event data is NOT passed | Same as ShellCommand — handler must fetch data itself |
+
+**How to determine your target type:**
+- If you used `--port` and `--port-path` → **InvokePort** (event data in POST body)
+- If you used `--command` → **ShellCommand** (must fetch data yourself)
+- Check the trigger's `callbackUrl`: if it contains `proxy.azuredevcompute.io` → InvokePort;
+  if it contains `executeShellCommand` → ShellCommand
 
 ### Sandbox environment details
 
