@@ -31,7 +31,7 @@ to sandbox apps via direct API calls or event-driven triggers.
 | **No guessing dynamic values** | If a parameter has `x-ms-dynamic-*`, you MUST call the API, present results, and wait for user selection. Never assume a team/channel/folder/site. |
 | **Execute, don't ask** | Gather user inputs → execute operations immediately → report result. Never say "Can I run this?" |
 | **Two script types** | Setup = `az` CLI commands (no files). Handler = Python file deployed to sandbox (calls runtime URL via HTTP). |
-| **SSL in sandbox** | Sandbox uses TLS-intercepting proxy. Set `REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt` or `verify=False` for dev. See [egress-setup.md](references/egress-setup.md). |
+| **SSL in sandbox** | Use `REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt` (preferred). Fallback: `verify=False` + `urllib3.disable_warnings()`. **stderr = trigger failure** — never leave warnings unsuppressed. |
 | **Parallel execution** | Run independent operations (connections, ACLs, egress, dynamic values) as parallel tool calls. |
 | **Tool permissions** | If "Permission denied", ask user to enable autopilot mode, then retry. |
 

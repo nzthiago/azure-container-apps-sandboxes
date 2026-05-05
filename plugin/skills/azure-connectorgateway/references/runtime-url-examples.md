@@ -72,18 +72,18 @@ curl -sk -X POST "${RUNTIME_URL}/v2/Mail" \
   }'
 ```
 
-## Office 365 — Get emails
+## Office 365 — Get emails (with attachments)
 
 ```bash
+# Always use includeAttachments=true to get attachments inline
 curl -sk "${RUNTIME_URL}/v2/Mail?folderPath=Inbox&top=5&includeAttachments=true"
+# Response includes Attachments[] array with ContentBytes (base64) for each email
 ```
 
-## Office 365 — Get single attachment content
-
-```bash
-curl -sk "${RUNTIME_URL}/codeless/v1.0/me/messages/{messageId}/attachments/{attachmentId}"
-# Returns JSON with contentBytes (base64-encoded)
-```
+> **⚠️ Do NOT use separate attachment endpoints** (`/codeless/v1.0/me/messages/{id}/attachments/{id}`
+> or `/v2/Mail/{id}/Attachments/{id}`) — they return 404 from runtime URLs.
+> Always use `includeAttachments=true` on the `/v2/Mail` query instead.
+> Attachments are returned inline as `email.Attachments[].ContentBytes` (base64-encoded).
 
 ## SharePoint — Get list items
 
@@ -107,5 +107,6 @@ curl -sk -X POST "${RUNTIME_URL}/datasets/{encoded_site_url}/tables/{list_name}/
 - The response format varies by connector — some return the created resource,
   some return `{"statusCode": 200}`, some return raw data
 - For Teams `messageBody`: HTML is supported (`<p>`, `<b>`, `<a>`, etc.)
-- For attachment content: `contentBytes` is base64-encoded — decode with `base64 -d`
+- For attachment content: `ContentBytes` is base64-encoded — decode with `base64.b64decode()`
+- Attachment endpoints (`/codeless/`, `/v1.0/`) return 404 — always use `includeAttachments=true`
 - Strip the `/{connectionId}` prefix from Swagger paths — connection context is already set

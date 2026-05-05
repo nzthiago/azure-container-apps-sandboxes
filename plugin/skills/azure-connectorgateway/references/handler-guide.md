@@ -40,7 +40,33 @@ How to build and deploy handler scripts to sandboxes.
 | **Environment variables** | Work via `executeShellCommand`'s `environment` field |
 | **Auth for runtime URL calls** | NOT needed — egress transform injects Bearer automatically |
 | **File system** | Writable at `/app/`. Deploy handler scripts here |
-| **SSL/TLS** | Use `verify=False` or system CA store. Proxy CA may intercept |
+| **SSL/TLS** | Prefer `REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt`. Fallback: `verify=False` + suppress warnings |
+| **stderr = failure** | Trigger runtime treats ANY stderr output as failure. Suppress all warnings. |
+
+## Critical: SSL and stderr handling
+
+> **⚠️ The trigger runtime marks a ShellCommand as FAILED if anything is written to stderr,
+> even if exit code is 0.** This means `InsecureRequestWarning` from `verify=False` will
+> cause silent trigger failures.
+
+**Correct approach (in order of preference):**
+
+```python
+import os
+
+# Option 1 (PREFERRED): Use system CA bundle — no warnings, no issues
+os.environ["REQUESTS_CA_BUNDLE"] = "/etc/ssl/certs/ca-certificates.crt"
+import requests
+# All requests now use the sandbox proxy CA — no verify=False needed
+
+# Option 2 (FALLBACK): If CA bundle fails, disable verification + suppress warnings
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+import requests
+# Now use verify=False without stderr output
+```
+
+**Every handler MUST include one of these at the top, before any `requests` calls.**
 
 ## MI token in sandbox (App Service-style)
 
@@ -64,17 +90,52 @@ def get_mi_token(resource):
 |-------|-----------|
 | `HasAttachment` is singular | Use `HasAttachment` not `HasAttachments` |
 | `hasAttachments=true` filter unreliable | Fetch top N, filter client-side |
-| `includeAttachments=true` intermittent | Add retry (3 attempts, 2s delay) |
-| `/v2/Mail/{id}/Attachments/{id}` returns 404 | Use `/codeless/v1.0/me/messages/{id}/attachments/{id}` |
+| Attachments: use `includeAttachments=true` | Add `?includeAttachments=true` to `/v2/Mail` query — returns `Attachments[]` with `ContentBytes` (base64) inline |
+| `/codeless/` or `/v1.0/` attachment endpoints | ❌ Return 404 from runtime URLs. Do NOT use separate attachment endpoints. |
 | `contentBytes: null` without flag | Always pass `includeAttachments=true` |
 | Inline images count as attachments | Filter with `not att.get("IsInline", False)` |
+| `includeAttachments=true` intermittent | Add retry (3 attempts, 2s delay) |
+
+## Deploying handler to sandbox
+
+**Primary method — `write_file()` (recommended):**
+```python
+from azure.sandbox import SandboxClient
+client = SandboxClient(resource_group="{rg}")
+client.write_file("{sandbox_id}", "{sandbox_group}", "/app/handler.py",
+    content=handler_code.encode())
+```
+
+**Alternative — via shell command:**
+```bash
+az sandbox execute -g {rg} -s {sandbox_group} --sandbox-id {id} \
+  --command "echo '<base64_content>' | base64 -d > /app/handler.py"
+```
+
+Prefer `write_file()` — simpler, no base64 encoding, no shell escaping issues.
 
 ## Handler template (ShellCommand + runtime URL)
 
 ```python
 #!/usr/bin/env python3
 """Handler for ShellCommand triggers calling connection runtime URLs."""
-import os, time, json, requests
+import os, sys, time, json
+
+# === SSL SETUP (MUST be before any requests import) ===
+os.environ["REQUESTS_CA_BUNDLE"] = "/etc/ssl/certs/ca-certificates.crt"
+try:
+    import requests
+    # Test that CA bundle works
+    requests.get("https://management.azure.com", timeout=5)
+except Exception:
+    # Fallback: disable SSL verification + suppress warnings
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    os.environ.pop("REQUESTS_CA_BUNDLE", None)
+    import requests
+    SSL_VERIFY = False
+else:
+    SSL_VERIFY = True
 
 # Runtime URLs — egress handles auth, NO Bearer token needed
 O365_URL = os.environ.get("O365_RUNTIME_URL", "https://....azure-apihub.net/apim/office365/...")
@@ -83,7 +144,7 @@ ONEDRIVE_URL = os.environ.get("ONEDRIVE_RUNTIME_URL", "https://....azure-apihub.
 def http_get(url, retries=3, delay=2):
     """GET with retry — connector API can be intermittent."""
     for attempt in range(retries):
-        resp = requests.get(url, verify=False)
+        resp = requests.get(url, verify=SSL_VERIFY)
         if resp.status_code == 200:
             return resp.json()
         if attempt < retries - 1:
@@ -94,8 +155,8 @@ def http_post(url, data=None, json_body=None, content_type="application/json"):
     """POST to runtime URL."""
     headers = {"Content-Type": content_type}
     if json_body:
-        return requests.post(url, json=json_body, headers=headers, verify=False)
-    return requests.post(url, data=data, headers=headers, verify=False)
+        return requests.post(url, json=json_body, headers=headers, verify=SSL_VERIFY)
+    return requests.post(url, data=data, headers=headers, verify=SSL_VERIFY)
 
 def main():
     # 1. Fetch data from source connector
@@ -108,8 +169,10 @@ if __name__ == "__main__":
 ```
 
 **Key points:**
-- Use `verify=False` — sandbox may lack CA certs
+- SSL: CA bundle first, `verify=False` + `disable_warnings()` as fallback
+- **Never leave `verify=False` without `urllib3.disable_warnings()`** — stderr = trigger failure
 - Add retry logic (2-3 attempts, 2s delay)
 - Egress handles auth — do NOT add Authorization headers
 - Use `requests` not `httpx`
-- Deploy via `executeShellCommand`: `echo '<base64>' | base64 -d > /app/handler.py`
+- Deploy via `write_file()` (preferred) or base64 pipe
+- For email attachments: use `includeAttachments=true` on `/v2/Mail`, NOT separate endpoints
