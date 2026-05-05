@@ -54,7 +54,7 @@ Sandboxes.
 
 ```powershell
 # Clone this repo, then:
-cd agent-swarm-service-python
+cd samples/agent-swarms
 
 az login
 azd auth login
@@ -211,7 +211,8 @@ What happens server-side:
 
 - The PAT is stored as a short-lived run-scoped secret keyed by run id.
 - The run is scheduled in Durable Task Scheduler.
-- ACA Sandboxes execute each step (planner → worker → reviewer → publisher).
+- ACA Sandboxes execute the planner, worker, and reviewer steps. Publishing
+  runs in the app/runtime host via the GitHub publisher (not in a sandbox).
 - Any caller with the `runId` returned in the response can list, read, and
   control the run later — there are no cookies to share.
 

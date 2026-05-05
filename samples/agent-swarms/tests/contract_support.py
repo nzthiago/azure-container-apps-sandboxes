@@ -141,7 +141,7 @@ _LOG_TAIL_FUNCTION_CANDIDATES = (
 
 def repo_path(relative_path: str) -> Path:
 
-    return REPO_ROOT / Path(relative_path)
+    return REPO_ROOT.joinpath(*relative_path.replace("\\", "/").split("/"))
 
 
 

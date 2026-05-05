@@ -251,8 +251,11 @@ class ServiceSettings(BaseModel):
                     "worker_model": resolved.get("SWARM_WORKER_MODEL", "gpt-4.1"),
                     "reviewer_model": resolved.get("SWARM_REVIEWER_MODEL", "gpt-4.1"),
                      "copilot_runtime_provider": resolved.get(
-                         "SWARM_COPILOT_RUNTIME_PROVIDER",
-                         "github-copilot-sdk",
+                         "SWARM_COPILOT_RUNTIME",
+                         resolved.get(
+                             "SWARM_COPILOT_RUNTIME_PROVIDER",
+                             "github-copilot-sdk",
+                         ),
                      ),
                      "copilot_token_environment_variable": resolved.get(
                          "SWARM_COPILOT_TOKEN_ENV_VAR",

@@ -48,7 +48,10 @@ async def create_run(
     request: CreateSwarmRunRequest,
     swarm_run_service=Depends(get_swarm_run_service),
 ) -> SwarmRunSummaryResponse:
-    return await swarm_run_service.create_run(request)
+    try:
+        return await swarm_run_service.create_run(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get("/{run_id}", response_model=SwarmRunSummaryResponse, response_model_exclude_none=True)

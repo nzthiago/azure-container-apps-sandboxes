@@ -2,7 +2,16 @@ from __future__ import annotations
 
 import unittest
 
-from contract_support import REQUIRED_SETTINGS, load_create_request_model, load_settings_model, validate_model
+from contract_support import (
+    REQUIRED_SETTINGS,
+    ensure_src_on_path,
+    load_create_request_model,
+    load_settings_model,
+    validate_model,
+)
+
+ensure_src_on_path()
+
 from agent_swarm_service.api.schemas import CreateSwarmRunRequest
 from agent_swarm_service.config import ServiceSettings
 
