@@ -31,6 +31,12 @@ external services to sandbox actions (run command, call HTTP port, tool integrat
 > **⚠️ Do NOT generate a Jupyter notebook or one-shot automation.**
 > Walk the user through setup **interactively** — ask questions, then execute.
 
+> **🚫 Do NOT create MCP configs.** MCP configs are for AI agent tool integration
+> and are NOT needed for trigger-based apps or direct API calls. When the handler
+> needs to call a connector (e.g., read email, upload to OneDrive), it uses the
+> **connection runtime URL** directly — no MCP config needed. If you find yourself
+> running `az connectorgateway mcp-config create`, STOP — you are on the wrong path.
+
 > **⚠️ Two types of scripts — know the difference:**
 > - **Setup operations** (gateway, connections, triggers, ACLs, egress) →
 >   execute via `az` CLI directly. Do NOT create script files for setup.
@@ -195,9 +201,8 @@ Ask the user:
     The handler app in the sandbox can then use **direct API calls** to fetch
     additional data or take actions (e.g., read email body, create files).
 
-> **⚠️ Do NOT create MCP configs unless the user specifically asks for AI agent tool integration.**
-> MCP configs are for wiring connector operations as tools in an AI agent.
-> For all other use cases (direct calls, event-driven apps), use paths A or B above.
+> **⚠️ Do NOT create MCP configs** — they are for AI agent tool integration only.
+> For both direct API calls and trigger-based apps, use paths A or B above.
 
 **Stop and wait for the user's answer before continuing.**
 
@@ -815,8 +820,9 @@ Ask the user:
 - Create the trigger config:
 
   > **⚠️ PowerShell JSON quoting**: Single-quoted JSON with inner double quotes
-  > works in PowerShell. If `--parameters` causes issues, use a here-string or
-  > escape with backticks.
+  > **PowerShell JSON quoting**: Always use `'{\"key\":\"value\"}'` (escaped quotes
+  > inside single quotes). Plain `'{"key":"value"}'` will fail — PowerShell strips
+  > the inner double quotes before passing to the CLI.
 
   ```powershell
   # For ShellCommand target:
@@ -898,6 +904,10 @@ Ask the user:
 - ✅ Sandbox is Running (for InvokePort targets)
 - ✅ Port auth is configured (for InvokePort targets — gateway principalId in objectIds)
 - ✅ If handler calls runtime URL: egress transform + sandbox MI ACL also needed (same as path A)
+
+> **🚫 After trigger creation, proceed to deploying the handler app.**
+> Do NOT create MCP configs. The handler calls connection runtime URLs directly
+> using `requests`/`urllib` with egress transform auth — no MCP config is involved.
 
 **IMPORTANT: Do NOT skip to code generation. Walk the user through each step interactively.**
 
