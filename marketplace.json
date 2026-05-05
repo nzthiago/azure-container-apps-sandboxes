@@ -1,0 +1,22 @@
+{
+  "name": "azure-container-apps",
+  "metadata": {
+    "description": "Azure Container Apps Sandboxes — Plugin Marketplace",
+    "version": "0.4.0-alpha.1"
+  },
+  "owner": {
+    "name": "Microsoft",
+    "email": "sandboxes@microsoft.com"
+  },
+  "plugins": [
+    {
+      "name": "azure-sandbox",
+      "source": "./plugin",
+      "description": "Azure Container Apps Sandboxes — create, exec, shell, files, ports, egress, images, snapshots, suspend/resume with sub-second startup and scale-to-zero.",
+      "version": "0.3.0a1",
+      "skills": [
+        "./plugin/skills/azure-sandbox"
+      ]
+    }
+  ]
+}

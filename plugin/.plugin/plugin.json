@@ -1,0 +1,20 @@
+{
+  "name": "azure-container-apps",
+  "description": "Azure Container Appssandbox plugins marketplace — skills for sandbox groups, sandboxes, exec, shell, files, ports, egress, images, and snapshots.",
+  "version": "0.3.0",
+  "author": {
+    "name": "Microsoft",
+    "url": "https://www.microsoft.com"
+  },
+  "homepage": "https://github.com/Azure-Samples/azure-container-apps-sandboxes",
+  "repository": "https://github.com/Azure-Samples/azure-container-apps-sandboxes",
+  "license": "MIT",
+  "keywords": [
+    "azure",
+    "container-apps",
+    "sandbox",
+    "microvm",
+    "ai-agents"
+  ],
+  "skills": "./skills/"
+}
