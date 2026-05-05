@@ -167,33 +167,30 @@ def add_vendored_sandbox_wheels_to_path() -> None:
         wheel_dir = base_dir / "vendor" / "wheels"
         if not wheel_dir.is_dir():
             continue
-        for pattern in ("azure_sandbox-*.whl", "azure_mgmt_sandbox-*.whl"):
-            for wheel_path in sorted(wheel_dir.glob(pattern)):
-                wheel_str = str(wheel_path)
-                if wheel_str not in sys.path:
-                    sys.path.insert(0, wheel_str)
+        for wheel_path in sorted(wheel_dir.glob("azure_containerapps_sandbox-*.whl")):
+            wheel_str = str(wheel_path)
+            if wheel_str not in sys.path:
+                sys.path.insert(0, wheel_str)
         return
 
 
 def import_sandbox_clients() -> tuple[Any, Any]:
     try:
-        from azure.mgmt.sandbox import SandboxGroupManagementClient
-        from azure.sandbox import SandboxClient
+        from azure.containerapps.sandbox import SandboxClient, SandboxGroupClient
 
-        return SandboxClient, SandboxGroupManagementClient
+        return SandboxClient, SandboxGroupClient
     except ImportError:
         add_vendored_sandbox_wheels_to_path()
         try:
-            from azure.mgmt.sandbox import SandboxGroupManagementClient
-            from azure.sandbox import SandboxClient
+            from azure.containerapps.sandbox import SandboxClient, SandboxGroupClient
 
-            return SandboxClient, SandboxGroupManagementClient
+            return SandboxClient, SandboxGroupClient
         except ImportError as exc:
             raise ImportError(
-                "Unable to import `azure.sandbox` and `azure.mgmt.sandbox`. "
-                "Install the sandbox wheels from the GitHub Release for "
-                "Azure-Samples/azure-container-apps-sandboxes, or place vendored wheels in "
-                "`vendor\\wheels` so the lab can load them as a local fallback."
+                "Unable to import `azure.containerapps.sandbox`. "
+                "Install `azure-containerapps-sandbox`, or place a vendored "
+                "`azure_containerapps_sandbox-*.whl` in `vendor\\wheels` so the lab "
+                "can load it as a local fallback."
             ) from exc
 
 
@@ -204,7 +201,7 @@ class SandboxWorkflowClient:
 
     @classmethod
     def create(cls, *, subscription_id: str, resource_group: str) -> "SandboxWorkflowClient":
-        SandboxClient, SandboxGroupManagementClient = import_sandbox_clients()
+        SandboxClient, SandboxGroupClient = import_sandbox_clients()
         credential = create_runtime_credential()
         try:
             sandbox = SandboxClient(
@@ -215,13 +212,13 @@ class SandboxWorkflowClient:
         except TypeError:
             sandbox = SandboxClient(subscription_id=subscription_id, resource_group=resource_group)
         try:
-            sandbox_groups = SandboxGroupManagementClient(
+            sandbox_groups = SandboxGroupClient(
                 subscription_id=subscription_id,
                 resource_group=resource_group,
                 credential=credential,
             )
         except TypeError:
-            sandbox_groups = SandboxGroupManagementClient(
+            sandbox_groups = SandboxGroupClient(
                 subscription_id=subscription_id,
                 resource_group=resource_group,
             )
@@ -498,13 +495,15 @@ def parse_last_json_line(stdout: str | None) -> Any:
     return stdout.strip()
 
 
-def compact_stats(stats: dict[str, Any]) -> dict[str, Any]:
-    memory = stats.get("memory") or {}
-    cpu = stats.get("cpu") or {}
+def compact_stats(stats: Any) -> dict[str, Any]:
+    memory = getattr(stats, "memory", None)
+    cpu = getattr(stats, "cpu", None)
+    memory_used_bytes = getattr(memory, "used_bytes", 0) or 0
+    memory_total_bytes = getattr(memory, "total_bytes", 0) or 0
     return {
-        "memory_used_mb": round(int(memory.get("usedBytes", 0)) / 1024 / 1024, 2),
-        "memory_total_mb": round(int(memory.get("totalBytes", 0)) / 1024 / 1024, 2),
-        "cpu_nano_cores": cpu.get("usageNanoCores"),
+        "memory_used_mb": round(int(memory_used_bytes) / 1024 / 1024, 2),
+        "memory_total_mb": round(int(memory_total_bytes) / 1024 / 1024, 2),
+        "cpu_nano_cores": getattr(cpu, "usage_nano_cores", None),
     }
 
 
@@ -588,8 +587,8 @@ def register_workflows(worker: Any, config: LabConfig) -> None:
         sandbox_group = payload.get("sandbox_group", config.sandbox_group)
         sandbox = sandbox_client.create_sandbox(sandbox_group, disk=payload.get("disk", "ubuntu"))
         return {
-            "sandbox_id": sandbox["id"],
-            "sandbox_state": sandbox.get("state"),
+            "sandbox_id": sandbox.id,
+            "sandbox_state": sandbox.state,
         }
 
     def stage_workload_activity(_: Any, payload: dict[str, Any]) -> dict[str, Any]:
@@ -615,13 +614,13 @@ def register_workflows(worker: Any, config: LabConfig) -> None:
         sandbox_id = payload["sandbox_id"]
         sandbox_group = payload.get("sandbox_group", config.sandbox_group)
         result = sandbox_client.exec(sandbox_id, sandbox_group, sandbox_shell_command(payload["workload_path"]))
-        exit_code = result.get("exitCode", 1)
-        stderr = (result.get("stderr") or "").strip()
+        exit_code = result.exit_code if result.exit_code is not None else 1
+        stderr = (result.stderr or "").strip()
         if exit_code != 0:
-            raise RuntimeError(stderr or result.get("stdout") or "sandbox workload failed")
+            raise RuntimeError(stderr or result.stdout or "sandbox workload failed")
         return {
             "exit_code": exit_code,
-            "workload_output": parse_last_json_line(result.get("stdout")),
+            "workload_output": parse_last_json_line(result.stdout),
             "stderr": stderr or None,
         }
 
@@ -637,7 +636,7 @@ def register_workflows(worker: Any, config: LabConfig) -> None:
         snapshot_name = sanitize_name(f"{payload.get('job_name', 'job')}-snapshot", max_length=28)
         snapshot = sandbox_client.create_snapshot(sandbox_id, sandbox_group, name=snapshot_name)
         return {
-            "snapshot_id": snapshot.get("id"),
+            "snapshot_id": snapshot.id,
             "snapshot_name": snapshot_name,
         }
 
@@ -651,8 +650,8 @@ def register_workflows(worker: Any, config: LabConfig) -> None:
         resumed = sandbox_client.exec(sandbox_id, sandbox_group, "printf 'resume-ok\n'")
         return {
             "resume_check": {
-                "exit_code": resumed.get("exitCode", 1),
-                "stdout": (resumed.get("stdout") or "").strip(),
+                "exit_code": resumed.exit_code if resumed.exit_code is not None else 1,
+                "stdout": (resumed.stdout or "").strip(),
             }
         }
 
@@ -668,7 +667,7 @@ def register_workflows(worker: Any, config: LabConfig) -> None:
     def run_sandbox_job_activity(_: Any, payload: dict[str, Any]) -> dict[str, Any]:
         sandbox_group = payload.get("sandbox_group", config.sandbox_group)
         sandbox = sandbox_client.create_sandbox(sandbox_group, disk=payload.get("disk", "ubuntu"))
-        sandbox_id = sandbox["id"]
+        sandbox_id = sandbox.id
         cleanup_requested = bool(payload.get("cleanup", False))
         cleanup_summary = {
             "requested": cleanup_requested,
@@ -695,10 +694,10 @@ def register_workflows(worker: Any, config: LabConfig) -> None:
                 ),
             )
             execution = sandbox_client.exec(sandbox_id, sandbox_group, sandbox_shell_command(workload_path))
-            exit_code = execution.get("exitCode", 1)
-            stderr = (execution.get("stderr") or "").strip()
+            exit_code = execution.exit_code if execution.exit_code is not None else 1
+            stderr = (execution.stderr or "").strip()
             if exit_code != 0:
-                raise RuntimeError(stderr or execution.get("stdout") or "sandbox workload failed")
+                raise RuntimeError(stderr or execution.stdout or "sandbox workload failed")
 
             snapshot_name = sanitize_name(f"{result_payload['job_name']}-snapshot", max_length=28)
             snapshot = sandbox_client.create_snapshot(sandbox_id, sandbox_group, name=snapshot_name)
@@ -711,17 +710,17 @@ def register_workflows(worker: Any, config: LabConfig) -> None:
                 time.sleep(5)
                 resumed = sandbox_client.exec(sandbox_id, sandbox_group, "printf 'resume-ok\n'")
                 resume_check = {
-                    "exit_code": resumed.get("exitCode", 1),
-                    "stdout": (resumed.get("stdout") or "").strip(),
+                    "exit_code": resumed.exit_code if resumed.exit_code is not None else 1,
+                    "stdout": (resumed.stdout or "").strip(),
                 }
 
             result_payload.update(
                 {
                     "exit_code": exit_code,
-                    "workload_output": parse_last_json_line(execution.get("stdout")),
+                    "workload_output": parse_last_json_line(execution.stdout),
                     "stderr": stderr or None,
                     "stats": compact_stats(sandbox_client.get_stats(sandbox_id, sandbox_group)),
-                    "snapshot_id": snapshot.get("id"),
+                    "snapshot_id": snapshot.id,
                     "snapshot_name": snapshot_name,
                     "resume_check": resume_check,
                 }

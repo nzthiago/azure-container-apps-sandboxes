@@ -25,7 +25,7 @@ In this lab you will:
 ```mermaid
 flowchart LR
     A[Notebook or main.py<br/>worker process] -->|az durabletask| B[DTS scheduler + task hub]
-    A -->|azure.sandbox / azure.mgmt.sandbox| C[Sandbox group]
+    A -->|azure.containerapps.sandbox| C[Sandbox group]
     B -->|schedule orchestration| A
     A --> D[Create sandbox]
     D --> E[Stage workload in /workspace]
@@ -48,20 +48,20 @@ flowchart LR
 - Azure subscription with permission to create resource groups, DTS resources, and sandbox resources
 - Azure CLI signed in with `az login`
 - VS Code with the Jupyter extension if you want the notebook-first experience
-- Python environment with the sandbox SDKs installed
+- Python environment with the sandbox SDK installed
 
 ### Install the Python packages
 
-Install the sandbox SDKs first, then add DTS separately:
+Install the sandbox SDK first, then add DTS separately:
 
 ```powershell
-pip install azure-sandbox azure-mgmt-sandbox
+pip install azure-containerapps-sandbox
 pip install durabletask-azuremanaged
 ```
 
 ### Or install sandbox wheels from a GitHub Release
 
-If you want to validate against release wheels from this repo, install those first and then add DTS separately.
+If you want to validate against a release wheel from this repo, install it first and then add DTS separately.
 
 GitHub CLI is required for this flow: `gh auth status`
 
@@ -69,10 +69,9 @@ GitHub CLI is required for this flow: `gh auth status`
 $wheelDir = Join-Path (Get-Location) '.artifacts\release-wheels'
 New-Item -ItemType Directory -Force -Path $wheelDir | Out-Null
 
-gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern 'azure_sandbox-*.whl' --dir $wheelDir
-gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern 'azure_mgmt_sandbox-*.whl' --dir $wheelDir
+gh release download <tag> --repo Azure-Samples/azure-container-apps-sandboxes --pattern 'azure_containerapps_sandbox-*.whl' --dir $wheelDir
 
-$sdkWheels = Get-ChildItem "$wheelDir\azure_sandbox-*.whl", "$wheelDir\azure_mgmt_sandbox-*.whl" | ForEach-Object FullName
+$sdkWheels = Get-ChildItem "$wheelDir\azure_containerapps_sandbox-*.whl" | ForEach-Object FullName
 pip install @sdkWheels
 pip install durabletask-azuremanaged
 ```
