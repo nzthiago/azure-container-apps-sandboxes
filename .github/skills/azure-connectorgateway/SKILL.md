@@ -258,12 +258,23 @@ The gateway injects the stored OAuth credentials and forwards to the connector.
    the difference is how parameters are resolved and results are extracted.
 
    > **⚠️ PowerShell JSON quoting for `az rest --body`:**
-   > In PowerShell, use escaped double quotes inside single quotes:
+   > For simple static JSON, use escaped double quotes inside single quotes:
    > ```powershell
    > az rest --method POST --url "..." --body '{\"request\":{\"method\":\"GET\",\"path\":\"/datasets/default/folders\"}}' --headers "Content-Type=application/json"
    > ```
-   > Do NOT use `ConvertTo-Json` — it strips the inner quotes. Do NOT use unescaped
-   > single-quoted JSON — PowerShell passes it without quotes to `az`.
+   > For **dynamic values** in the JSON (e.g., folder IDs with special characters),
+   > use the `@file` pattern — write JSON to a temp file and pass `--body @$tmpFile`:
+   > ```powershell
+   > $bodyJson = '{"request":{"method":"GET","path":"/datasets/default/folders/' + $encodedId + '"}}'
+   > $tmpBody = [System.IO.Path]::GetTempFileName()
+   > $bodyJson | Out-File -FilePath $tmpBody -Encoding ascii -NoNewline
+   > az rest --method POST --url "..." --body "@$tmpBody" --headers "Content-Type=application/json"
+   > Remove-Item $tmpBody -ErrorAction SilentlyContinue
+   > ```
+   > The `@file` pattern is **required** when IDs contain `!`, `%`, or other
+   > characters that PowerShell or `az rest` mangle. Always URL-encode IDs with
+   > `[System.Uri]::EscapeDataString($id)` before embedding in the path.
+   >
    > **Always include `--headers "Content-Type=application/json"`** with `az rest` for `dynamicInvoke`.
 
    #### `x-ms-dynamic-values` — Flat list of options
@@ -328,35 +339,107 @@ The gateway injects the stored OAuth credentials and forwards to the connector.
        "itemTitlePath": "DisplayName",
        "itemsPath": "value",
        "itemIsParent": "IsFolder eq true",
-       "parameters": { "folderId": { "selectedItemValuePath": "Id" } }
+       "parameters": { "id": { "selectedItemValuePath": "Id" } }
      },
      "settings": { "canSelectParentNodes": true, "canSelectLeafNodes": false }
    }
    ```
-   **How to handle:**
-   1. Call the `open` operation to get root items:
-      ```powershell
-      az rest --method POST `
-        --url ".../dynamicInvoke?api-version=2026-05-01-preview" `
-        --body '{\"request\":{\"method\":\"GET\",\"path\":\"{open_operation_path}\"}}' `
-        --headers "Content-Type=application/json" -o json
-      ```
-   2. Extract items using `itemsPath` (e.g., `value`)
-   3. For each item: extract `itemValuePath` (ID), `itemTitlePath` (name),
-      and evaluate `itemIsParent` to determine if it has children
-   4. Present items as choices. Mark folders with 📁 prefix. **STOP and wait.**
-   5. If user selects a parent node (folder) and wants to go deeper:
-      - Call `browse` operation, substituting `selectedItemValuePath` from the
-        selected item into the browse parameters:
-        ```powershell
-        # "folderId": {"selectedItemValuePath": "Id"} means use selected item's Id
-        az rest --method POST `
-          --url ".../dynamicInvoke?api-version=2026-05-01-preview" `
-          --body '{\"request\":{\"method\":\"GET\",\"path\":\"{browse_path}/{selected_id}/children\"}}' `
-          --headers "Content-Type=application/json" -o json
-        ```
-   6. Present children + "✅ Use this folder" option. **STOP and wait.**
-   7. Repeat until user makes final selection.
+
+   **How to handle — step-by-step algorithm:**
+
+   **Step T1: Resolve the `open` operationId to an HTTP path.**
+   Find the operation in the Swagger (from `listOperations`) whose `operationId`
+   matches `open.operationId`. Extract its `method` and `path`.
+   ```powershell
+   # Example: if open.operationId = "ListRootFolders" resolves to GET /datasets/default/folders
+   ```
+
+   **Step T2: Call the `open` operation to get root items.**
+   ```powershell
+   # For static paths (no dynamic IDs), use escaped quotes:
+   az rest --method POST `
+     --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/{conn}/dynamicInvoke?api-version=2026-05-01-preview" `
+     --body '{\"request\":{\"method\":\"GET\",\"path\":\"/datasets/default/folders\"}}' `
+     --headers "Content-Type=application/json" `
+     --query "response.body[].{Name:DisplayName, Id:Id, IsFolder:IsFolder}" -o table
+   ```
+   The response returns an array of items. Each item has the fields referenced by
+   `itemValuePath` (e.g., `Id`), `itemTitlePath` (e.g., `DisplayName`), and
+   `itemIsParent` (e.g., `IsFolder`).
+
+   **Step T3: Present root items as choices. STOP and wait.**
+   Show all items to the user. Mark folders with 📁 prefix. Include a
+   "✅ Select this level (root)" option if `canSelectParentNodes` is true.
+   ```
+   📁 Apps
+   📁 Documents
+   📁 Desktop
+   📁 EmailAttachments
+   ✅ Select root (/)
+   ```
+   **STOP and wait for user selection.**
+
+   **Step T4: If user selects a folder and wants to go deeper — BROWSE.**
+   Resolve the `browse` operationId to an HTTP path. The `browse.parameters`
+   tell you how to substitute the selected item's value into the path:
+   - `"id": { "selectedItemValuePath": "Id" }` means: take the `Id` field from
+     the selected item and substitute it for the `{id}` path parameter.
+   - **URL-encode the ID** — OneDrive IDs contain `!` and other special characters.
+
+   ```powershell
+   # The selected item's Id (e.g., from Documents folder):
+   $selectedId = "b!oBRIc...01EBKFNYMT34SLMMPFYFEKV2L46DV54RIE"
+   $encodedId = [System.Uri]::EscapeDataString($selectedId)
+
+   # Build the browse path by substituting the ID into the browse operation's path
+   # If browse resolves to: GET /datasets/default/folders/{id}
+   # Then the actual path is: /datasets/default/folders/{encodedId}
+   $bodyJson = '{"request":{"method":"GET","path":"/datasets/default/folders/' + $encodedId + '"}}'
+   $tmpBody = [System.IO.Path]::GetTempFileName()
+   $bodyJson | Out-File -FilePath $tmpBody -Encoding ascii -NoNewline
+
+   az rest --method POST `
+     --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/{conn}/dynamicInvoke?api-version=2026-05-01-preview" `
+     --body "@$tmpBody" `
+     --headers "Content-Type=application/json" `
+     --query "response.body[].{Name:DisplayName, Id:Id, Path:Path, IsFolder:IsFolder}" -o table
+
+   Remove-Item $tmpBody -ErrorAction SilentlyContinue
+   ```
+
+   > **⚠️ MUST use `@file` pattern for browse calls.** Folder/item IDs often
+   > contain `!`, `.`, and long base64 strings that break PowerShell inline quoting.
+   > Always write JSON to a temp file and pass `--body @$tmpFile`.
+
+   **Step T5: Present children + selection option. STOP and wait.**
+   ```
+   📁 BackupOldDesktop
+   📁 Copilot
+   📁 Custom Office Templates
+   ✅ Select this folder (/Documents)
+   ```
+   **STOP and wait for user selection.**
+
+   **Step T6: Repeat T4-T5** until the user selects a folder (clicks "✅ Select
+   this folder") or selects a leaf item. Use the final item's `Path` or `Id`
+   as the parameter value for the original operation.
+
+   **Summary of the tree walk pattern:**
+   ```
+   open (root) → present choices → STOP
+     └─ user picks "Documents" → browse(Documents.Id) → present choices → STOP
+          └─ user picks "Copilot" → browse(Copilot.Id) → present choices → STOP
+               └─ user picks "✅ Select this folder" → use "/Documents/Copilot"
+   ```
+
+   **Key rules for dynamic tree:**
+   - **Always resolve `operationId` to path** from the Swagger — do NOT guess paths
+   - **Always URL-encode IDs** with `[System.Uri]::EscapeDataString()`
+   - **Always use `@file` pattern** for browse calls (IDs have special chars)
+   - **Always STOP at each level** — let the user choose to go deeper or select
+   - If `browse` is not defined, reuse `open` with the selected item's ID as parameter
+   - The final value to use is typically the `Path` field (e.g., `/Documents/Copilot`)
+     or the `Id` field, depending on what the original operation parameter expects
 
    #### `x-ms-dynamic-schema` — Schema depends on prior selection
    The parameter's fields change based on another parameter's value:
@@ -1074,6 +1157,7 @@ Run `az connectorgateway --help` to see all available commands.
 | Runtime URL 403: missing connection ACL | Create an access policy granting the caller's principalId access to the connection before calling the runtime URL directly |
 | Consent redirect page shows error | Use `--redirect-url "https://microsoft.com"` instead of the default consent service redirect. The consent auto-confirms at `/confirm` — the redirect is just for UX. User sees microsoft.com after auth instead of an error page. |
 | Connection stuck in "Error" after consent | Check status with `az connectorgateway connection show`. If still `Error`, the user may not have completed browser auth. Re-generate the consent link and retry. |
+| `dynamicInvoke` browse fails with mangled JSON | Use `@file` pattern for `az rest --body` when IDs contain `!` or special chars. Write JSON to temp file, pass `--body @$tmpFile`. Always URL-encode IDs with `[System.Uri]::EscapeDataString()` |
 | Swagger paths include `/{connectionId}/...` | Strip the `/{connectionId}` prefix when building `dynamicInvoke` paths — the connection context is already set by the endpoint |
 | ShellCommand trigger 403 on callback | Gateway MI needs **"Dev Compute SandboxGroup Data Owner"** role (`c24cf47c-5077-412d-a19c-45202126392c`) on the sandbox group. Do NOT use Contributor — use this least-privilege data plane role |
 
@@ -1100,15 +1184,32 @@ will use (target folders, channels, lists, etc.) and collect them interactively:
 | Teams team/channel | Fetch via `dynamicInvoke` GET `/beta/me/joinedTeams`, then channels, present as choices |
 | Email folder | Fetch via `dynamicInvoke` GET `/datasets/default/folders`, or use default `Inbox` (inform user) |
 
-**Example: Collecting OneDrive folder before writing handler:**
+**Example: Collecting OneDrive folder before writing handler (tree browsing):**
 ```powershell
-# Fetch available OneDrive folders (note: escaped quotes required in PowerShell)
+# Step 1: Fetch ROOT folders (open operation)
 az rest --method POST `
   --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/{onedrive_conn}/dynamicInvoke?api-version=2026-05-01-preview" `
   --body '{\"request\":{\"method\":\"GET\",\"path\":\"/datasets/default/folders\"}}' `
   --headers "Content-Type=application/json" `
-  --query "response.body[].{Name:DisplayName, Path:Path}" -o table
-# Present folder names as choices to user via ask_user
+  --query "response.body[].{Name:DisplayName, Id:Id, Path:Path}" -o table
+# → Present as choices via ask_user. STOP and wait.
+
+# Step 2: If user wants to go deeper — BROWSE into the selected folder
+$selectedId = "<Id from the folder the user picked>"
+$encodedId = [System.Uri]::EscapeDataString($selectedId)
+$bodyJson = '{"request":{"method":"GET","path":"/datasets/default/folders/' + $encodedId + '"}}'
+$tmpBody = [System.IO.Path]::GetTempFileName()
+$bodyJson | Out-File -FilePath $tmpBody -Encoding ascii -NoNewline
+
+az rest --method POST `
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/{onedrive_conn}/dynamicInvoke?api-version=2026-05-01-preview" `
+  --body "@$tmpBody" `
+  --headers "Content-Type=application/json" `
+  --query "response.body[].{Name:DisplayName, Id:Id, Path:Path}" -o table
+
+Remove-Item $tmpBody -ErrorAction SilentlyContinue
+# → Present child folders + "✅ Select this folder" option. STOP and wait.
+# → Repeat until user selects a folder. Use the Path value in the handler.
 ```
 
 **STOP and wait for the user's selection. Only THEN write the handler code with
