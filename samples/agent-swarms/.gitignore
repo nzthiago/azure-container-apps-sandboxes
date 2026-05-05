@@ -1,0 +1,15 @@
+tests/.scratch/
+# Python: generated caches and packaging artifacts
+__pycache__/
+.pytest_cache/
+*.egg-info/
+.eggs/
+*.egg
+dist/
+dist/**
+pip-wheel-metadata/
+build/
+build/**
+.copilot/
+*.log
+vendor/

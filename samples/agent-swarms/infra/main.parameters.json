@@ -1,0 +1,31 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "${AZURE_ENV_NAME}"
+    },
+    "location": {
+      "value": "${AZURE_LOCATION}"
+    },
+    "sandboxDiskId": {
+      "value": "${SWARM_SANDBOX_DISK_ID}"
+    },
+    "runtimeContractSettings": {
+      "value": [
+        "SWARM_APP_BASE_URL",
+        "DTS_CONNECTION_STRING",
+        "AZURE_SUBSCRIPTION_ID",
+        "AZURE_RESOURCE_GROUP",
+        "AZURE_LOCATION",
+        "SWARM_COPILOT_RUNTIME",
+        "SWARM_COPILOT_AUTH_MODE",
+        "SWARM_COPILOT_TOKEN_ENV_VAR",
+        "SWARM_COPILOT_USE_LOGGED_IN_USER",
+        "SWARM_STORAGE_ACCOUNT_URL",
+        "SWARM_SANDBOX_GROUP_NAME",
+        "SWARM_SANDBOX_DISK_ID"
+      ]
+    }
+  }
+}

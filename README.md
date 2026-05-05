@@ -34,6 +34,12 @@ This repo contains developer tools, plugins, and tutorials for ACA Sandboxes:
 - **Labs** — Hands-on Jupyter notebook tutorials
 - **Release artifacts** — Python SDK wheels and ACA CLI npm package published through GitHub Releases
 
+## Samples
+
+| Sample | Description |
+|--------|-------------|
+| [agent-swarms](samples/agent-swarms/) | Deployable end-to-end sample for agent swarms using Durable Task Scheduler and ACA Sandboxes |
+
 ## Install
 
 ### Plugin (Copilot CLI / Claude Code)

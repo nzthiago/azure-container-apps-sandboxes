@@ -1,0 +1,573 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.40.2.10011",
+      "templateHash": "3336703237974992800"
+    }
+  },
+  "parameters": {
+    "namePrefix": {
+      "type": "string",
+      "defaultValue": "swarm",
+      "minLength": 5,
+      "metadata": {
+        "description": "Short prefix used in deterministic resource names."
+      }
+    },
+    "environmentName": {
+      "type": "string",
+      "minLength": 1,
+      "metadata": {
+        "description": "Deployment environment name used by azd."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for all resources. ACA sandbox groups are in preview; verify provider registration and regional availability before running `azd up`."
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Optional tags applied to all resources."
+      }
+    },
+    "serviceName": {
+      "type": "string",
+      "defaultValue": "swarm-api",
+      "metadata": {
+        "description": "azd service name used to map the deployed image onto the provisioned Container App."
+      }
+    },
+    "containerImage": {
+      "type": "string",
+      "defaultValue": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
+      "metadata": {
+        "description": "Placeholder image used when the Container App is first created. `azd deploy` replaces it with the freshly built image from ACR."
+      }
+    },
+    "targetPort": {
+      "type": "int",
+      "defaultValue": 8000,
+      "metadata": {
+        "description": "FastAPI container port."
+      }
+    },
+    "containerCpu": {
+      "type": "string",
+      "defaultValue": "0.5",
+      "metadata": {
+        "description": "CPU requested by the Container App."
+      }
+    },
+    "containerMemory": {
+      "type": "string",
+      "defaultValue": "1.0Gi",
+      "metadata": {
+        "description": "Memory requested by the Container App."
+      }
+    },
+    "sandboxGroupName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional explicit sandbox group name. Leave empty to derive one from the environment name."
+      }
+    },
+    "sandboxDiskId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional private sandbox DiskId surfaced to the runtime and forwarded to ACA sandbox creation."
+      }
+    },
+    "defaultPlannerModel": {
+      "type": "string",
+      "defaultValue": "gpt-4.1",
+      "metadata": {
+        "description": "Default planner model surfaced to the app."
+      }
+    },
+    "defaultWorkerModel": {
+      "type": "string",
+      "defaultValue": "gpt-4.1",
+      "metadata": {
+        "description": "Default worker model surfaced to the app."
+      }
+    },
+    "defaultReviewerModel": {
+      "type": "string",
+      "defaultValue": "gpt-4.1",
+      "metadata": {
+        "description": "Default reviewer model surfaced to the app."
+      }
+    },
+    "sandboxIdleTimeoutSeconds": {
+      "type": "int",
+      "defaultValue": 300,
+      "minValue": 60,
+      "metadata": {
+        "description": "Default sandbox idle timeout in seconds surfaced to the app."
+      }
+    },
+    "keepFailedSandboxes": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Whether failed sandboxes are retained by default."
+      }
+    },
+    "dtsSchedulerName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional explicit Durable Task Scheduler name. Leave empty to derive one from the environment name."
+      }
+    },
+    "dtsTaskHubName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional explicit Durable Task task hub name. Leave empty to derive one from the environment name."
+      }
+    },
+    "dtsSkuName": {
+      "type": "string",
+      "defaultValue": "Consumption",
+      "allowedValues": [
+        "Consumption",
+        "Dedicated"
+      ],
+      "metadata": {
+        "description": "Durable Task Scheduler SKU. Consumption keeps the public sample closer to a fresh-environment default."
+      }
+    },
+    "dtsSkuCapacity": {
+      "type": "int",
+      "defaultValue": 1,
+      "minValue": 1,
+      "metadata": {
+        "description": "Durable Task Scheduler SKU capacity. Only applied when the DTS SKU is Dedicated."
+      }
+    },
+    "dtsPublicNetworkAccess": {
+      "type": "string",
+      "defaultValue": "Enabled",
+      "allowedValues": [
+        "Enabled",
+        "Disabled"
+      ],
+      "metadata": {
+        "description": "Public network access for Durable Task Scheduler. Keep enabled for the default external sample unless ACA egress is pinned."
+      }
+    },
+    "dtsIpAllowlist": {
+      "type": "array",
+      "defaultValue": [
+        "0.0.0.0/0"
+      ],
+      "metadata": {
+        "description": "Allowed ingress CIDRs for Durable Task Scheduler. Defaults to open access because ACA egress is not pinned in the baseline sample."
+      }
+    },
+    "runtimeContractSettings": {
+      "type": "array",
+      "defaultValue": [
+        "SWARM_APP_BASE_URL",
+        "DTS_CONNECTION_STRING",
+        "AZURE_SUBSCRIPTION_ID",
+        "AZURE_RESOURCE_GROUP",
+        "AZURE_LOCATION",
+        "SWARM_COPILOT_RUNTIME",
+        "SWARM_COPILOT_AUTH_MODE",
+        "SWARM_COPILOT_TOKEN_ENV_VAR",
+        "SWARM_COPILOT_USE_LOGGED_IN_USER",
+        "SWARM_STORAGE_ACCOUNT_URL",
+        "SWARM_SANDBOX_GROUP_NAME",
+        "SWARM_SANDBOX_DISK_ID"
+      ],
+      "metadata": {
+        "description": "Review-ready snapshot of the runtime settings injected into the Container App."
+      }
+    }
+  },
+  "variables": {
+    "normalizedPrefix": "[toLower(replace(replace(parameters('namePrefix'), '_', '-'), '.', '-'))]",
+    "normalizedEnvironment": "[toLower(replace(replace(parameters('environmentName'), '_', '-'), '.', '-'))]",
+    "uniqueSuffix": "[take(uniqueString(subscription().subscriptionId, resourceGroup().id, variables('normalizedPrefix'), variables('normalizedEnvironment'), parameters('location')), 6)]",
+    "constrainedBaseName": "[take(format('{0}-{1}-{2}', variables('normalizedPrefix'), variables('normalizedEnvironment'), variables('uniqueSuffix')), 24)]",
+    "logAnalyticsWorkspaceName": "[take(format('{0}-law', variables('constrainedBaseName')), 63)]",
+    "appInsightsName": "[take(format('{0}-appi', variables('constrainedBaseName')), 64)]",
+    "containerRegistryNameSeed": "[toLower(replace(format('{0}acr00{1}{2}', variables('uniqueSuffix'), variables('normalizedPrefix'), variables('normalizedEnvironment')), '-', ''))]",
+    "containerRegistryName": "[take(variables('containerRegistryNameSeed'), 50)]",
+    "managedIdentityName": "[take(format('{0}-mi', variables('constrainedBaseName')), 128)]",
+    "storageAccountNameSeed": "[toLower(replace(format('{0}st000{1}{2}', variables('uniqueSuffix'), variables('normalizedPrefix'), variables('normalizedEnvironment')), '-', ''))]",
+    "storageAccountName": "[take(variables('storageAccountNameSeed'), 24)]",
+    "containerAppsEnvironmentName": "[take(format('{0}-cae', variables('constrainedBaseName')), 32)]",
+    "containerAppName": "[take(format('{0}-api', variables('constrainedBaseName')), 32)]",
+    "effectiveSandboxGroupName": "[if(empty(parameters('sandboxGroupName')), take(format('{0}-sandbox', variables('constrainedBaseName')), 63), parameters('sandboxGroupName'))]",
+    "effectiveDtsSchedulerName": "[if(empty(parameters('dtsSchedulerName')), take(format('{0}-dts', variables('constrainedBaseName')), 63), parameters('dtsSchedulerName'))]",
+    "effectiveDtsTaskHubName": "[if(empty(parameters('dtsTaskHubName')), take(format('{0}-hub', variables('constrainedBaseName')), 63), parameters('dtsTaskHubName'))]",
+    "dtsSku": "[if(equals(parameters('dtsSkuName'), 'Consumption'), createObject('name', parameters('dtsSkuName')), createObject('name', parameters('dtsSkuName'), 'capacity', parameters('dtsSkuCapacity')))]",
+    "resourceTags": "[union(parameters('tags'), createObject('azd-env-name', parameters('environmentName'), 'azd-service-name', parameters('serviceName')))]",
+    "optionalSandboxSelectorEnvironmentVariables": "[concat(if(empty(parameters('sandboxDiskId')), createArray(), createArray(createObject('name', 'SWARM_SANDBOX_DISK_ID', 'value', parameters('sandboxDiskId')))))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2023-01-31",
+      "name": "[variables('managedIdentityName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]"
+    },
+    {
+      "type": "Microsoft.ContainerRegistry/registries",
+      "apiVersion": "2023-07-01",
+      "name": "[variables('containerRegistryName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Basic"
+      },
+      "tags": "[variables('resourceTags')]",
+      "properties": {
+        "adminUserEnabled": false,
+        "publicNetworkAccess": "Enabled"
+      }
+    },
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('logAnalyticsWorkspaceName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]",
+      "properties": {
+        "retentionInDays": 30,
+        "sku": {
+          "name": "PerGB2018"
+        },
+        "features": {
+          "enableLogAccessUsingOnlyResourcePermissions": true
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "[variables('appInsightsName')]",
+      "location": "[parameters('location')]",
+      "kind": "web",
+      "tags": "[variables('resourceTags')]",
+      "properties": {
+        "Application_Type": "web",
+        "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsWorkspaceName'))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsWorkspaceName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-05-01",
+      "name": "[variables('storageAccountName')]",
+      "location": "[parameters('location')]",
+      "kind": "StorageV2",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "tags": "[variables('resourceTags')]",
+      "properties": {
+        "accessTier": "Hot",
+        "allowBlobPublicAccess": false,
+        "allowSharedKeyAccess": true,
+        "minimumTlsVersion": "TLS1_2",
+        "supportsHttpsTrafficOnly": true
+      }
+    },
+    {
+      "type": "Microsoft.DurableTask/schedulers",
+      "apiVersion": "2026-02-01",
+      "name": "[variables('effectiveDtsSchedulerName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]",
+      "properties": {
+        "ipAllowlist": "[parameters('dtsIpAllowlist')]",
+        "publicNetworkAccess": "[parameters('dtsPublicNetworkAccess')]",
+        "sku": "[variables('dtsSku')]"
+      }
+    },
+    {
+      "type": "Microsoft.DurableTask/schedulers/taskHubs",
+      "apiVersion": "2026-02-01",
+      "name": "[format('{0}/{1}', variables('effectiveDtsSchedulerName'), variables('effectiveDtsTaskHubName'))]",
+      "properties": {},
+      "dependsOn": [
+        "[resourceId('Microsoft.DurableTask/schedulers', variables('effectiveDtsSchedulerName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.App/managedEnvironments",
+      "apiVersion": "2024-03-01",
+      "name": "[variables('containerAppsEnvironmentName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]",
+      "properties": {
+        "appLogsConfiguration": {
+          "destination": "log-analytics",
+          "logAnalyticsConfiguration": {
+            "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsWorkspaceName')), '2023-09-01').customerId]",
+            "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsWorkspaceName')), '2023-09-01').primarySharedKey]"
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsWorkspaceName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.App/sandboxGroups",
+      "apiVersion": "2026-02-01-preview",
+      "name": "[variables('effectiveSandboxGroupName')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "tags": "[variables('resourceTags')]",
+      "properties": {}
+    },
+    {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[variables('containerAppName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')))]": {}
+        }
+      },
+      "properties": {
+        "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', variables('containerAppsEnvironmentName'))]",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "ingress": {
+            "allowInsecure": false,
+            "external": true,
+            "targetPort": "[parameters('targetPort')]",
+            "transport": "auto"
+          },
+          "registries": [
+            {
+              "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', variables('containerRegistryName')), '2023-07-01').loginServer]",
+              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName'))]"
+            }
+          ]
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "swarm-api",
+              "image": "[parameters('containerImage')]",
+              "env": "[concat(createArray(createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').ConnectionString), createObject('name', 'AZURE_CLIENT_ID', 'value', reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').clientId), createObject('name', 'AZURE_LOCATION', 'value', parameters('location')), createObject('name', 'AZURE_RESOURCE_GROUP', 'value', resourceGroup().name), createObject('name', 'AZURE_SUBSCRIPTION_ID', 'value', subscription().subscriptionId), createObject('name', 'DTS_CONNECTION_STRING', 'value', format('Endpoint={0};Authentication=ManagedIdentity;ClientID={1};TaskHub={2}', reference(resourceId('Microsoft.DurableTask/schedulers', variables('effectiveDtsSchedulerName')), '2026-02-01').endpoint, reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').clientId, variables('effectiveDtsTaskHubName'))), createObject('name', 'SWARM_APP_BASE_URL', 'value', format('https://{0}.{1}', variables('containerAppName'), reference(resourceId('Microsoft.App/managedEnvironments', variables('containerAppsEnvironmentName')), '2024-03-01').defaultDomain)), createObject('name', 'SWARM_COPILOT_AUTH_MODE', 'value', 'run-scoped-pat'), createObject('name', 'SWARM_COPILOT_RUNTIME', 'value', 'github-copilot-sdk'), createObject('name', 'SWARM_COPILOT_TOKEN_ENV_VAR', 'value', 'GH_TOKEN'), createObject('name', 'SWARM_COPILOT_USE_LOGGED_IN_USER', 'value', 'false'), createObject('name', 'SWARM_PLANNER_MODEL', 'value', parameters('defaultPlannerModel')), createObject('name', 'SWARM_REVIEWER_MODEL', 'value', parameters('defaultReviewerModel')), createObject('name', 'SWARM_WORKER_MODEL', 'value', parameters('defaultWorkerModel')), createObject('name', 'SWARM_KEEP_FAILED_SANDBOXES', 'value', string(parameters('keepFailedSandboxes'))), createObject('name', 'SWARM_SANDBOX_GROUP_NAME', 'value', variables('effectiveSandboxGroupName')), createObject('name', 'SWARM_SANDBOX_IDLE_TIMEOUT_SECONDS', 'value', string(parameters('sandboxIdleTimeoutSeconds'))), createObject('name', 'SWARM_STORAGE_ACCOUNT_NAME', 'value', variables('storageAccountName')), createObject('name', 'SWARM_STORAGE_ACCOUNT_URL', 'value', reference(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2023-05-01').primaryEndpoints.blob)), variables('optionalSandboxSelectorEnvironmentVariables'))]",
+              "probes": [
+                {
+                  "type": "Liveness",
+                  "httpGet": {
+                    "path": "/health",
+                    "port": "[parameters('targetPort')]"
+                  },
+                  "initialDelaySeconds": 15,
+                  "periodSeconds": 30
+                },
+                {
+                  "type": "Readiness",
+                  "httpGet": {
+                    "path": "/health",
+                    "port": "[parameters('targetPort')]"
+                  },
+                  "initialDelaySeconds": 5,
+                  "periodSeconds": 10
+                }
+              ],
+              "resources": {
+                "cpu": "[json(parameters('containerCpu'))]",
+                "memory": "[parameters('containerMemory')]"
+              }
+            }
+          ],
+          "scale": {
+            "minReplicas": 1,
+            "maxReplicas": 1
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]",
+        "[resourceId('Microsoft.App/managedEnvironments', variables('containerAppsEnvironmentName'))]",
+        "[resourceId('Microsoft.ContainerRegistry/registries', variables('containerRegistryName'))]",
+        "[resourceId('Microsoft.DurableTask/schedulers', variables('effectiveDtsSchedulerName'))]",
+        "[resourceId('Microsoft.DurableTask/schedulers/taskHubs', variables('effectiveDtsSchedulerName'), variables('effectiveDtsTaskHubName'))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.ContainerRegistry/registries', variables('containerRegistryName'))]",
+      "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', variables('containerRegistryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '7f951dda-4ed3-4680-a7ca-43fe172d538d')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ContainerRegistry/registries', variables('containerRegistryName'))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.DurableTask/schedulers', variables('effectiveDtsSchedulerName'))]",
+      "name": "[guid(resourceId('Microsoft.DurableTask/schedulers', variables('effectiveDtsSchedulerName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '0ad04412-c4d5-4796-b79c-f76d14c8d402')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '0ad04412-c4d5-4796-b79c-f76d14c8d402')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DurableTask/schedulers', variables('effectiveDtsSchedulerName'))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.App/sandboxGroups', variables('effectiveSandboxGroupName'))]",
+      "name": "[guid(resourceId('Microsoft.App/sandboxGroups', variables('effectiveSandboxGroupName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), 'c24cf47c-5077-412d-a19c-45202126392c')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'c24cf47c-5077-412d-a19c-45202126392c')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName'))]",
+        "[resourceId('Microsoft.App/sandboxGroups', variables('effectiveSandboxGroupName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.App/sandboxGroups', variables('effectiveSandboxGroupName'))]",
+      "name": "[guid(resourceId('Microsoft.App/sandboxGroups', variables('effectiveSandboxGroupName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), 'b24988ac-6180-42a0-ab88-20f7382dd24c')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName'))]",
+        "[resourceId('Microsoft.App/sandboxGroups', variables('effectiveSandboxGroupName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "applicationInsightsConnectionString": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').ConnectionString]"
+    },
+    "AZURE_CONTAINER_REGISTRY_ENDPOINT": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.ContainerRegistry/registries', variables('containerRegistryName')), '2023-07-01').loginServer]"
+    },
+    "containerAppName": {
+      "type": "string",
+      "value": "[variables('containerAppName')]"
+    },
+    "containerAppUrl": {
+      "type": "string",
+      "value": "[format('https://{0}.{1}', variables('containerAppName'), reference(resourceId('Microsoft.App/managedEnvironments', variables('containerAppsEnvironmentName')), '2024-03-01').defaultDomain)]"
+    },
+    "containerRegistryLoginServer": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.ContainerRegistry/registries', variables('containerRegistryName')), '2023-07-01').loginServer]"
+    },
+    "dtsConnectionString": {
+      "type": "string",
+      "value": "[format('Endpoint={0};Authentication=ManagedIdentity;ClientID={1};TaskHub={2}', reference(resourceId('Microsoft.DurableTask/schedulers', variables('effectiveDtsSchedulerName')), '2026-02-01').endpoint, reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').clientId, variables('effectiveDtsTaskHubName'))]"
+    },
+    "dtsEndpoint": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.DurableTask/schedulers', variables('effectiveDtsSchedulerName')), '2026-02-01').endpoint]"
+    },
+    "dtsSchedulerName": {
+      "type": "string",
+      "value": "[variables('effectiveDtsSchedulerName')]"
+    },
+    "dtsTaskHubName": {
+      "type": "string",
+      "value": "[variables('effectiveDtsTaskHubName')]"
+    },
+    "managedIdentityClientId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').clientId]"
+    },
+    "managedIdentityPrincipalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').principalId]"
+    },
+    "runtimeSettingsContract": {
+      "type": "array",
+      "value": "[parameters('runtimeContractSettings')]"
+    },
+    "sandboxGroupName": {
+      "type": "string",
+      "value": "[variables('effectiveSandboxGroupName')]"
+    },
+    "storageAccountBlobEndpoint": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2023-05-01').primaryEndpoints.blob]"
+    },
+    "storageAccountTableEndpoint": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2023-05-01').primaryEndpoints.table]"
+    }
+  }
+}

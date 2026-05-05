@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-swarm-service"
+version = "0.1.0"
+description = "FastAPI backend foundation for the ACA Sandboxes agent swarm sample."
+requires-python = ">=3.11"
+dependencies = [
+    "azure-core>=1.32,<2.0",
+    "azure-identity>=1.20,<2.0",
+    "azure-mgmt-sandbox==0.1.0b1",
+    "azure-sandbox==0.1.0b1",
+    "azure-storage-blob>=12.24,<13.0",
+    "azure-storage-queue>=12.12,<13.0",
+    "durabletask>=1.1,<2.0",
+    "durabletask-azuremanaged>=1.1,<2.0",
+    "fastapi>=0.115,<1.0",
+    "github-copilot-sdk==0.3.0",
+    "httpx>=0.27,<1.0",
+    "pydantic>=2.7,<3.0",
+    "uvicorn[standard]>=0.30,<1.0",
+]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,10 @@
+.git
+.github
+.azure
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.log
+build/

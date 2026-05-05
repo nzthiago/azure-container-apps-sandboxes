@@ -1,0 +1,29 @@
+name: agent-swarm-service-python
+metadata:
+  template: agent-swarm-service-python@0.1.0-alpha
+
+# Required before `azd up`:
+#   azd env set AZURE_LOCATION <supported-region>
+#   Pick a region that supports both ACA Sandboxes (preview) and Durable Task Scheduler.
+hooks:
+  preprovision:
+    posix:
+      shell: sh
+      run: ./hooks/preprovision.sh
+    windows:
+      shell: pwsh
+      run: ./hooks/preprovision.ps1
+
+infra:
+  provider: bicep
+  path: ./infra
+  module: main
+
+services:
+  swarm-api:
+    project: ./src/agent_swarm_service
+    language: python
+    host: containerapp
+    docker:
+      path: ../../Dockerfile
+      context: ../..
