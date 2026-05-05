@@ -64,8 +64,7 @@ class ExternalSampleLayoutTests(unittest.TestCase):
             self,
             (
                 "Dockerfile",
-                r"vendor\wheels\azure_mgmt_sandbox-0.1.1b1-py3-none-any.whl",
-                r"vendor\wheels\azure_sandbox-0.1.1b1-py3-none-any.whl",
+                r"vendor\wheels\azure_containerapps_sandbox-0.1.0b1-py3-none-any.whl",
             ),
             "The azd packaging path depends on a repo-root Dockerfile plus bundled preview SDK wheels.",
         )

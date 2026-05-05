@@ -18,6 +18,7 @@ env/
 *.swp
 *.swo
 *~
+.vscode/
 
 # Jupyter
 .ipynb_checkpoints/

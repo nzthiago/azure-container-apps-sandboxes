@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import Request
-from azure.mgmt.sandbox import SandboxGroupManagementClient
+from azure.containerapps.sandbox import SandboxGroupClient
 
 from agent_swarm_service.config import ServiceSettings
 from agent_swarm_service.sandboxes.logs import SandboxLogChunk, redact_text
@@ -23,7 +23,7 @@ def get_sandbox_client(request: Request) -> Any:
     return request.app.state.sandbox_client
 
 
-def get_sandbox_group_client(request: Request) -> SandboxGroupManagementClient:
+def get_sandbox_group_client(request: Request) -> SandboxGroupClient:
     return request.app.state.sandbox_group_client
 
 

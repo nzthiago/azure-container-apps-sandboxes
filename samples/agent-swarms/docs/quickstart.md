@@ -113,7 +113,7 @@ group via SDK or portal) lives in that README. The short version:
      (values come from `azd env get-values`) and create a new disk image
      pointing at the ACR image. ACA Sandboxes don't have a `portal.azure.com`
      blade yet while the feature is in preview.
-   - **Python SDK:** call `azure.sandbox.SandboxClient.create_disk_image(...)` (the sample README has a copy-pasteable script).
+   - **Python SDK:** call `azure.containerapps.sandbox.SandboxClient.create_disk_image(...)` (the sample README has a copy-pasteable script).
 4. Save the returned disk image **id** — that's the value you'll feed into `SWARM_SANDBOX_DISK_ID`.
 
 A compatible sandbox image must include:

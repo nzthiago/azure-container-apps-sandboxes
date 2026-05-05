@@ -3,8 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from azure.mgmt.sandbox import SandboxGroupManagementClient
-from azure.sandbox import SandboxClient
+from azure.containerapps.sandbox import SandboxClient, SandboxGroupClient
 
 from agent_swarm_service.api.routers import health, swarm_runs
 from agent_swarm_service.auth.session_store import DurableRunSecretStore
@@ -103,7 +102,7 @@ def create_app(
     app.state.run_secret_store = run_secret_store
     app.state.swarm_run_service = SwarmRunService(resolved_settings, coordinator, run_secret_store)
     app.state.sandbox_client = sandbox_client
-    app.state.sandbox_group_client = SandboxGroupManagementClient(
+    app.state.sandbox_group_client = SandboxGroupClient(
         resource_group=resolved_settings.azure.resource_group,
         subscription_id=resolved_settings.azure.subscription_id,
     )

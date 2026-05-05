@@ -11,6 +11,7 @@ from contract_support import ensure_src_on_path
 
 ensure_src_on_path()
 
+from azure.containerapps.sandbox import ExecResult
 from fastapi import HTTPException
 
 from agent_swarm_service.api.routers.swarm_runs import _has_active_sandbox, stream_sandbox_logs
@@ -191,10 +192,10 @@ class _RoleExecSandboxClient:
         command: str,
         working_directory: str | None = None,
         resource_group: str | None = None,
-    ) -> dict[str, object]:
+    ) -> ExecResult:
         self.exec_calls.append(command)
         del sandbox_id, sandbox_group, working_directory, resource_group
-        return {"exitCode": 0, "stdout": "", "stderr": ""}
+        return ExecResult(exit_code=0, stdout="", stderr="")
 
     def read_file(
         self,
@@ -219,7 +220,7 @@ class _PlannerExecSandboxClient(_RoleExecSandboxClient):
         command: str,
         working_directory: str | None = None,
         resource_group: str | None = None,
-    ) -> dict[str, object]:
+    ) -> ExecResult:
         del working_directory, resource_group
         self.exec_calls.append(command)
         result_root = command.split()[-1]
@@ -227,7 +228,7 @@ class _PlannerExecSandboxClient(_RoleExecSandboxClient):
             self.result_payload,
             sort_keys=True,
         ).encode("utf-8")
-        return {"exitCode": 0, "stdout": "", "stderr": ""}
+        return ExecResult(exit_code=0, stdout="", stderr="")
 
 
 class _FailingExecSandboxClient(_RoleExecSandboxClient):
@@ -244,12 +245,12 @@ class _FailingExecSandboxClient(_RoleExecSandboxClient):
         command: str,
         working_directory: str | None = None,
         resource_group: str | None = None,
-    ) -> dict[str, object]:
+    ) -> ExecResult:
         self.exec_calls.append(command)
         del working_directory, resource_group
         if self._log_text:
             self.contents[(sandbox_id, sandbox_group, DEFAULT_LOG_MIRROR_PATH)] = self._log_text.encode("utf-8")
-        return {"exitCode": 1, "stdout": self._stdout, "stderr": self._stderr}
+        return ExecResult(exit_code=1, stdout=self._stdout, stderr=self._stderr)
 
 
 class _TimeoutExecSandboxClient(_RoleExecSandboxClient):

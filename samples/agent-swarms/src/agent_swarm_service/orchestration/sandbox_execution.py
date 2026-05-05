@@ -533,15 +533,15 @@ class AcaSandboxLifecycleExecutor:
                 log_context,
             )
             raise
-        exit_code = int(exec_result.get("exitCode", -1))
+        exit_code = int(exec_result.exit_code)
         logger.info(
             "Sandbox exec finished exit_code=%s elapsed_seconds=%.2f %s",
             exit_code,
             time.monotonic() - exec_started,
             log_context,
         )
-        standard_output = redact_text(str(exec_result.get("stdout", "")), extra_values=list(environment.values()))
-        standard_error = redact_text(str(exec_result.get("stderr", "")), extra_values=list(environment.values()))
+        standard_output = redact_text(str(exec_result.stdout), extra_values=list(environment.values()))
+        standard_error = redact_text(str(exec_result.stderr), extra_values=list(environment.values()))
         if exit_code != 0:
             logger.warning("Sandbox exec returned non-zero exit code=%s %s", exit_code, log_context)
             failure_output = standard_error or standard_output

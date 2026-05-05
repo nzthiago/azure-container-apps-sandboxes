@@ -14,8 +14,7 @@ COPY vendor/wheels /vendor-wheels
 RUN python -m pip wheel --no-cache-dir --no-deps --wheel-dir /wheels --find-links=/vendor-wheels . \
     && python -m pip download --no-cache-dir --dest /wheels --find-links=/vendor-wheels \
     /wheels/agent_swarm_service-*.whl \
-    azure-sandbox \
-    azure-mgmt-sandbox
+    azure-containerapps-sandbox
 
 FROM python:3.12-slim AS runtime
 
@@ -35,8 +34,7 @@ COPY --from=app-wheel-builder /wheels /wheels
 
 RUN python -m pip install --no-cache-dir --no-index --find-links=/wheels \
     agent-swarm-service \
-    azure-sandbox \
-    azure-mgmt-sandbox \
+    azure-containerapps-sandbox \
     && rm -rf /wheels
 
 EXPOSE 8000

@@ -125,7 +125,7 @@ group via SDK or portal) lives in that README. The short version is:
      disk image pointing at the ACR image you just pushed. ACA Sandboxes
      don't have a `portal.azure.com` blade yet while the feature is in
      preview.
-   - **Python SDK:** call `azure.sandbox.SandboxClient.create_disk_image(...)`
+   - **Python SDK:** call `azure.containerapps.sandbox.SandboxClient.create_disk_image(...)`
      against your sandbox group. See the sample README for a copy-pasteable
      snippet.
 
@@ -253,10 +253,9 @@ You can poll progress, list events, or stream logs from the same Swagger UI:
 - Log Analytics + Application Insights.
 - An ACA sandbox group resource.
 
-The container image bundles `azure-sandbox` and `azure-mgmt-sandbox` (preview
-SDKs, vendored under `vendor/wheels/`) and installs `github-copilot-sdk` plus
-`git` so the deployed app can drive ACA sandboxes and run the Copilot SDK
-directly.
+The container image bundles `azure-containerapps-sandbox` preview SDK
+(vendored under `vendor/wheels/`) and installs `github-copilot-sdk` plus `git`
+so the deployed app can drive ACA sandboxes and run the Copilot SDK directly.
 
 ## Default models
 
@@ -298,14 +297,14 @@ environment variables the Container App receives.
 
 ## Local development
 
-The deployed `azd up` flow does not need `azure-sandbox`, `azure-mgmt-sandbox`,
-or `github-copilot-sdk` on your workstation — they are bundled into the
-container image. If you want to run the FastAPI app locally for iteration:
+The deployed `azd up` flow does not need `azure-containerapps-sandbox` or
+`github-copilot-sdk` on your workstation — they are bundled into the container
+image. If you want to run the FastAPI app locally for iteration:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e .
+python -m pip install --find-links vendor/wheels -e .
 python -m uvicorn agent_swarm_service.app:create_runtime_app --factory --reload
 ```
 

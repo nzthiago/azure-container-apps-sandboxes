@@ -1,3 +1,3 @@
-from azure.mgmt.sandbox import SandboxGroupManagementClient
+from azure.containerapps.sandbox import SandboxGroupClient
 
-__all__ = ["SandboxGroupManagementClient"]
+__all__ = ["SandboxGroupClient"]

@@ -50,7 +50,7 @@ So the order of operations is:
    the Azure Container Registry.
 2. Build this Docker image and push it to that ACR.
 3. Register the pushed image as a disk image inside your sandbox group
-   (Azure portal **or** the `azure-sandbox` Python SDK).
+   (Azure portal **or** the `azure-containerapps-sandbox` Python SDK).
 4. Set `SWARM_SANDBOX_DISK_ID` to the returned disk image ID and re-deploy.
 
 The rest of this README walks through steps 2–4.
@@ -83,8 +83,8 @@ if you prefer that name.
 ## Step 3 — Register the image as a sandbox disk image
 
 You can do this via the **ACA Sandboxes preview portal** (point-and-click)
-**or** via the `azure-sandbox` Python SDK (scriptable / repeatable). Both end
-at the same data-plane API.
+**or** via the `azure-containerapps-sandbox` Python SDK (scriptable /
+repeatable). Both end at the same data-plane API.
 
 ### Option A — ACA Sandboxes preview portal
 
@@ -129,26 +129,28 @@ Steps:
 > Sandboxes are pre-GA; it is expected to move under `portal.azure.com`
 > once the feature ships generally.
 
-### Option B — `azure-sandbox` Python SDK
+### Option B — `azure-containerapps-sandbox` Python SDK
 
-The `azure-sandbox` package (vendored in this repo at `vendor/wheels/`,
-also installable via `pip install azure-sandbox==0.1.1b1` once it is on PyPI
-in your environment) exposes
-[`SandboxClient.create_disk_image(...)`](../../src/agent_swarm_service/sandboxes/aca_client.py).
+The `azure-containerapps-sandbox` package (vendored in this repo at
+`vendor/wheels/`) exposes `SandboxClient.create_disk_image(...)`.
 
 Save the snippet below as `register_disk_image.py` next to this README and
-run it. You'll need `azure-sandbox`, `azure-mgmt-sandbox`, and
-`azure-identity` installed locally (or activate the repo's venv after
-running `python -m pip install -e .` from the repo root).
+run it. If you're running the script outside the sample's editable
+environment, then from `samples/agent-swarms/` install the m`azure-containerapps-sandbox`erged SDK plus
+`azure-identity` locally first:
+
+`python -m pip install vendor/wheels/azure_containerapps_sandbox-0.1.0b1-py3-none-any.whl azure-identity`
+
+Or activate the repo's venv after running `python -m pip install --find-links vendor/wheels -e .` from
+the repo root.
 
 ```python
 """Register the locally-built sandbox image as a private disk image."""
 from __future__ import annotations
 
-import os
 import subprocess
 
-from azure.sandbox import SandboxClient
+from azure.containerapps.sandbox import SandboxClient
 
 # Pull the values azd already wrote into the env file.
 azd_env = dict(
@@ -187,14 +189,16 @@ created = client.create_disk_image(
 )
 
 print("Disk image created:")
-print("  id  :", created["id"])
-print("  name:", created.get("labels", {}).get("name"))
+print("  id  :", created.id)
+print("  name:", created.labels.get("name"))
 ```
 
 `create_disk_image` is implemented as a single PUT against the data-plane
 API; the relevant SDK signature is:
 
 ```python
+from azure.containerapps.sandbox import DiskImage, SandboxClient
+
 SandboxClient.create_disk_image(
     sandbox_group: str,
     base_image: str,
@@ -204,7 +208,7 @@ SandboxClient.create_disk_image(
     registry_credentials: dict | None = None,
     managed_identity_resource_id: str | None = None,
     resource_group: str | None = None,
-) -> dict   # returns the created disk image, including its `id`
+) -> DiskImage   # returns the created disk image model; use `.id` / `.labels`
 ```
 
 If you need to authenticate against a private ACR with a username/password

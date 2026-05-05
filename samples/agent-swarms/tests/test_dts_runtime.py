@@ -8,12 +8,13 @@ import sys
 import tempfile
 import types
 import unittest
+from collections.abc import Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-from azure.sandbox import SandboxClient
+from azure.containerapps.sandbox import Sandbox, SandboxClient
 from durabletask.client import OrchestrationState, OrchestrationStatus
 from durabletask.internal import orchestrator_service_pb2 as pb
 from durabletask.task import CompletableTask, RetryPolicy, Task, TaskFailedError
@@ -78,6 +79,16 @@ from agent_swarm_service.orchestration.sandbox_execution import (
     WorkerExecutionResult,
 )
 from agent_swarm_service.runtime.storage import InMemoryRuntimeStorageBackend
+
+
+def _sandbox_id_value(sandbox: object | None) -> str:
+    if sandbox is None:
+        return ""
+    if isinstance(sandbox, Sandbox):
+        return sandbox.id
+    if isinstance(sandbox, Mapping):
+        return str(sandbox.get("id") or "")
+    return str(getattr(sandbox, "id", "") or "")
 
 
 def _run(coro):
@@ -383,7 +394,13 @@ class _RecordingSandboxClient:
         }
         self.create_calls.append(call)
         role = str(kwargs["labels"]["role"])
-        return {"id": f"{role}-sandbox"}
+        return Sandbox(
+            id=f"{role}-sandbox",
+            state="Running",
+            labels=dict(kwargs.get("labels") or {}),
+            environment=dict(kwargs.get("environment") or {}),
+            sandbox_group_id=sandbox_group,
+        )
 
 
 class _RecordingSandboxLifecycle:
@@ -421,7 +438,7 @@ class _RecordingSandboxLifecycle:
         self.execution_calls.append(("planner", run.id, None))
         if self._fail_role == "planner":
             raise RuntimeError("planner boom")
-        sandbox_id = str((sandbox or {}).get("id"))
+        sandbox_id = _sandbox_id_value(sandbox)
         return PlannerExecutionResult(
             sandbox_id=sandbox_id,
             summary="Planner completed.",
@@ -439,7 +456,7 @@ class _RecordingSandboxLifecycle:
         if self._fail_role == "worker":
             raise RuntimeError("worker boom")
         return WorkerExecutionResult(
-            sandbox_id=str(sandbox["id"]),
+            sandbox_id=_sandbox_id_value(sandbox),
             summary="Worker completed.",
             details="Updated files.",
             branch_name=f"swarm/octo/{run.id}/{task.id}",
@@ -460,7 +477,7 @@ class _RecordingSandboxLifecycle:
         if self._fail_role == "reviewer":
             raise RuntimeError("reviewer boom")
         return ReviewerExecutionResult(
-            sandbox_id=str(sandbox["id"]),
+            sandbox_id=_sandbox_id_value(sandbox),
             outcome="Approved",
             summary="Reviewer completed.",
             details="Looks good.",
@@ -482,7 +499,7 @@ class _RecordingSandboxLifecycle:
         if self._fail_role == "merge":
             raise RuntimeError("merge boom")
         return MergeExecutionResult(
-            sandbox_id=str(sandbox["id"]),
+            sandbox_id=_sandbox_id_value(sandbox),
             target_branch=run.target_branch or f"swarm/octo/{run.id}/integration",
             head_commit_sha="f" * 40,
             parent_commit_sha="e" * 40,
@@ -491,7 +508,7 @@ class _RecordingSandboxLifecycle:
         )
 
     async def cleanup_sandbox(self, sandbox: dict[str, object], *, failed: bool = False) -> None:
-        self.cleanup_calls.append((str(sandbox["id"]), failed))
+        self.cleanup_calls.append((_sandbox_id_value(sandbox), failed))
 
 
 def _dts_state(

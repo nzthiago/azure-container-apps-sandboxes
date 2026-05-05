@@ -167,19 +167,19 @@ Run lookups resolve by run id (no cookies). Things to check:
 - The run was not already purged via `DELETE /api/swarm-runs/{runId}/purge`.
 - You are calling the deployed `containerAppUrl`, not a stale one.
 
-## `pytest` reports `azure-sandbox` / `azure-mgmt-sandbox` import errors locally
+## `pytest` reports `azure-containerapps-sandbox` / `azure.containerapps.sandbox` import errors locally
 
-The `azd up` flow does **not** require those SDKs on your workstation — they
-are installed into the container image from `vendor/wheels/`. If you are
-running the test suite (or the FastAPI app) locally, install them in your
-local environment:
+The `azd up` flow does **not** require that SDK on your workstation — it is
+installed into the container image from `vendor/wheels/`. If you are running
+the test suite (or the FastAPI app) locally, install it in your local
+environment:
 
 ```powershell
-python -m pip install -e .
+python -m pip install --find-links vendor/wheels -e .
 ```
 
 That installs the project plus its declared dependencies, including the
-preview ACA sandbox SDKs (resolved from `vendor/wheels/` via `pyproject.toml`).
+preview ACA sandbox SDK from `vendor/wheels/`.
 
 ## Clean up
 

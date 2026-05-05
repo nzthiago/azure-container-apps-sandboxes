@@ -130,7 +130,7 @@ The ACA integration lives under `src/agent_swarm_service/sandboxes/`:
 - `workspace.py` — staged `/workspace/.swarm` payloads (request, result, log).
 - `logs.py` — mirrored log tail and redaction helpers.
 
-These call `azure-sandbox` and `azure-mgmt-sandbox` directly. Sandboxes:
+These call `azure-containerapps-sandbox` SDK directly. Sandboxes:
 
 - Execute planner, worker, and reviewer steps.
 - Honor the run-scoped Copilot auth contract (`github-copilot-sdk` + `GH_TOKEN`/`GITHUB_TOKEN`; `COPILOT_GITHUB_TOKEN` only when the runtime is explicitly configured to request it).
