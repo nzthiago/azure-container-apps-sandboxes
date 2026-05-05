@@ -136,7 +136,7 @@ The `azure-containerapps-sandbox` package (vendored in this repo at
 
 Save the snippet below as `register_disk_image.py` next to this README and
 run it. If you're running the script outside the sample's editable
-environment, then from `samples/agent-swarms/` install the m`azure-containerapps-sandbox`erged SDK plus
+environment, then from `samples/agent-swarms/` install the SDK plus
 `azure-identity` locally first:
 
 `python -m pip install vendor/wheels/azure_containerapps_sandbox-0.1.0b1-py3-none-any.whl azure-identity`

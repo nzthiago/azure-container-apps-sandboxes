@@ -230,6 +230,11 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' =
   properties: {
     adminUserEnabled: false
     publicNetworkAccess: 'Enabled'
+    policies: {
+      azureADAuthenticationAsArmPolicy: {
+        status: 'enabled'
+      }
+    }
   }
 }
 
@@ -314,7 +319,10 @@ resource sandboxGroup 'Microsoft.App/sandboxGroups@2026-02-01-preview' = {
   name: effectiveSandboxGroupName
   location: location
   identity: {
-    type: 'SystemAssigned'
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${managedIdentity.id}': {}
+    }
   }
   tags: resourceTags
   properties: {}
@@ -465,6 +473,7 @@ output dtsSchedulerName string = dtsScheduler.name
 output dtsTaskHubName string = dtsTaskHub.name
 output managedIdentityClientId string = managedIdentity.properties.clientId
 output managedIdentityPrincipalId string = managedIdentity.properties.principalId
+output managedIdentityResourceId string = managedIdentity.id
 output runtimeSettingsContract array = runtimeContractSettings
 output sandboxGroupName string = sandboxGroup.name
 output storageAccountBlobEndpoint string = storageAccount.properties.primaryEndpoints.blob

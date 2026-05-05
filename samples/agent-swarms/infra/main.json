@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.40.2.10011",
-      "templateHash": "3336703237974992800"
+      "templateHash": "7483984075503884733"
     }
   },
   "parameters": {
@@ -237,7 +237,12 @@
       "tags": "[variables('resourceTags')]",
       "properties": {
         "adminUserEnabled": false,
-        "publicNetworkAccess": "Enabled"
+        "publicNetworkAccess": "Enabled",
+        "policies": {
+          "azureADAuthenticationAsArmPolicy": {
+            "status": "enabled"
+          }
+        }
       }
     },
     {
@@ -335,10 +340,16 @@
       "name": "[variables('effectiveSandboxGroupName')]",
       "location": "[parameters('location')]",
       "identity": {
-        "type": "SystemAssigned"
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')))]": {}
+        }
       },
       "tags": "[variables('resourceTags')]",
-      "properties": {}
+      "properties": {},
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName'))]"
+      ]
     },
     {
       "type": "Microsoft.App/containerApps",
@@ -552,6 +563,10 @@
     "managedIdentityPrincipalId": {
       "type": "string",
       "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').principalId]"
+    },
+    "managedIdentityResourceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName'))]"
     },
     "runtimeSettingsContract": {
       "type": "array",
