@@ -442,31 +442,155 @@ The gateway injects the stored OAuth credentials and forwards to the connector.
      or the `Id` field, depending on what the original operation parameter expects
 
    #### `x-ms-dynamic-schema` — Schema depends on prior selection
-   The parameter's fields change based on another parameter's value:
+   The parameter's available fields/columns change based on another parameter's value.
+   The Swagger extension on the body parameter looks like:
    ```json
    "x-ms-dynamic-schema": {
-     "operationId": "GetTableSchema",
-     "parameters": { "dataset": { "parameter": "dataset" }, "table": { "parameter": "table" } },
+     "operationId": "GetTable",
+     "parameters": {
+       "dataset": { "parameter": "dataset" },
+       "table": { "parameter": "table" }
+     },
      "value-path": "Schema/Items"
    }
    ```
-   **How to handle:**
-   1. First collect ALL parameters the schema depends on (e.g., `dataset` and `table`)
-      — these are usually `x-ms-dynamic-values` themselves, so collect them first
-   2. Call the schema operation with resolved parameter values:
-      ```powershell
-      az rest --method POST `
-        --url ".../dynamicInvoke?api-version=2026-05-01-preview" `
-        --body '{\"request\":{\"method\":\"GET\",\"path\":\"/datasets/{site}/tables/{list}/schema\"}}' `
-        --headers "Content-Type=application/json" -o json
-      ```
-   3. Navigate the response using `value-path` (slash-separated): `Schema` → `Items`
-   4. Extract `properties` from the schema — these are the available fields
-   5. Present field names/types to the user, ask which ones to populate
-   6. **STOP and wait for user input on field values**
+   This means: "Call `GetTable` with the user's selected `dataset` and `table` values,
+   then navigate the response to `Schema` → `Items` to find the available fields."
 
-   **Common example:** SharePoint `PostItem` — body schema depends on which
-   site + list was selected (each list has different columns).
+   **How to handle — step-by-step algorithm:**
+
+   **Step S1: Identify the dependency chain.**
+   The `parameters` object tells you which other parameters must be collected FIRST.
+   Each entry like `"dataset": { "parameter": "dataset" }` means the schema operation
+   needs the value the user already selected for `dataset`.
+
+   These dependent parameters are usually `x-ms-dynamic-values` themselves — collect
+   them in order. Example dependency chain for SharePoint `PostItem`:
+   ```
+   dataset (site)  ← x-ms-dynamic-values via GetDataSets
+       ↓
+   table (list)    ← x-ms-dynamic-values via GetTables (depends on dataset)
+       ↓
+   item (body)     ← x-ms-dynamic-schema via GetTable (depends on dataset + table)
+   ```
+
+   **Step S2: Collect all dependent parameters first.**
+   Follow the `x-ms-dynamic-values` flow for each dependency:
+   ```powershell
+   # Step S2a: Get SharePoint sites (dataset parameter)
+   az rest --method POST `
+     --url ".../connections/{sp_conn}/dynamicInvoke?api-version=2026-05-01-preview" `
+     --body '{\"request\":{\"method\":\"GET\",\"path\":\"/datasets\"}}' `
+     --headers "Content-Type=application/json" `
+     --query "response.body.value[].{Name:Name, Display:DisplayName}" -o table
+   # → Present sites as choices. STOP and wait. User picks e.g. "https://contoso.sharepoint.com/sites/HR"
+
+   # Step S2b: Get lists for the selected site (table parameter)
+   # URL-encode the site URL since it goes in the path
+   $siteEncoded = [System.Uri]::EscapeDataString("https://contoso.sharepoint.com/sites/HR")
+   $bodyJson = '{"request":{"method":"GET","path":"/datasets/' + $siteEncoded + '/tables"}}'
+   $tmpBody = [System.IO.Path]::GetTempFileName()
+   $bodyJson | Out-File -FilePath $tmpBody -Encoding ascii -NoNewline
+
+   az rest --method POST `
+     --url ".../connections/{sp_conn}/dynamicInvoke?api-version=2026-05-01-preview" `
+     --body "@$tmpBody" `
+     --headers "Content-Type=application/json" `
+     --query "response.body.value[].{Name:Name, Display:DisplayName}" -o table
+
+   Remove-Item $tmpBody -ErrorAction SilentlyContinue
+   # → Present lists as choices. STOP and wait. User picks e.g. "New Hires"
+   ```
+
+   **Step S3: Resolve the schema operation's path.**
+   Find the operation in the Swagger whose `operationId` matches the schema's
+   `operationId`. Extract its HTTP method and path. Substitute the collected
+   parameter values into the path.
+   ```
+   GetTable → GET /$metadata.json/datasets/{dataset}/tables/{table}
+   Substituted → GET /$metadata.json/datasets/{siteEncoded}/tables/{listEncoded}
+   ```
+
+   **Step S4: Call the schema operation via `dynamicInvoke`.**
+   ```powershell
+   $siteEncoded = [System.Uri]::EscapeDataString($selectedSite)
+   $listEncoded = [System.Uri]::EscapeDataString($selectedList)
+   $bodyJson = '{"request":{"method":"GET","path":"/$metadata.json/datasets/' + $siteEncoded + '/tables/' + $listEncoded + '"}}'
+   $tmpBody = [System.IO.Path]::GetTempFileName()
+   $bodyJson | Out-File -FilePath $tmpBody -Encoding ascii -NoNewline
+
+   az rest --method POST `
+     --url ".../connections/{sp_conn}/dynamicInvoke?api-version=2026-05-01-preview" `
+     --body "@$tmpBody" `
+     --headers "Content-Type=application/json" `
+     --query "response.body" -o json
+
+   Remove-Item $tmpBody -ErrorAction SilentlyContinue
+   ```
+
+   **Step S5: Navigate the response using `value-path`.**
+   The `value-path` is slash-separated (e.g., `"Schema/Items"`). Walk each segment:
+   ```
+   response.body → navigate to "Schema" → navigate to "Items"
+   ```
+   The result is a JSON Schema object with a `properties` field. Each property
+   is a column/field the user can populate.
+
+   Example response after navigation to `Schema/Items`:
+   ```json
+   {
+     "type": "object",
+     "properties": {
+       "Title": { "type": "string", "x-ms-display": "Title" },
+       "StartDate": { "type": "string", "format": "date", "x-ms-display": "Start Date" },
+       "Manager": { "type": "string", "x-ms-display": "Manager" },
+       "Role": { "type": "string", "x-ms-display": "Role" }
+     },
+     "required": ["Title"]
+   }
+   ```
+   Use `--query "response.body.Schema.Items.properties"` to extract directly.
+
+   **Step S6: Present the available fields to the user. STOP and wait.**
+   Show the field names, types, and which are required:
+   ```
+   Available columns in "New Hires" list:
+   • Title (string) — REQUIRED
+   • StartDate (date)
+   • Manager (string)
+   • Role (string)
+   Which fields do you want to populate, and what values?
+   ```
+   **STOP and wait for the user to provide field names and values.**
+
+   **Step S7: Build the body for the original operation.**
+   Use the field names and values the user provided:
+   ```json
+   {
+     "Title": "Jane Smith",
+     "StartDate": "2026-06-01",
+     "Manager": "john@contoso.com",
+     "Role": "Software Engineer"
+   }
+   ```
+
+   **Summary of the schema resolution pattern:**
+   ```
+   GetDataSets → user picks site → STOP
+     └─ GetTables(site) → user picks list → STOP
+          └─ GetTable(site, list) → navigate value-path → extract properties
+               └─ present fields to user → STOP → user provides values
+                    └─ build body JSON → call PostItem
+   ```
+
+   **Key rules for dynamic schema:**
+   - **Collect dependencies in order** — the schema operation needs values from
+     prior `x-ms-dynamic-values` selections (site → list → schema)
+   - **Always resolve `operationId` to path** from the Swagger — do NOT guess
+   - **Navigate `value-path`** by splitting on `/` and walking each key in the response
+   - **Present ALL fields** with types and required markers — let the user choose
+   - **Do NOT assume field values** — always ask the user what to populate
+   - **URL-encode** all path parameters (site URLs, list names may contain spaces)
 
    #### No extension — static enum or free-form
    - If the parameter has a **static enum** in the Swagger schema, present those
