@@ -10,8 +10,18 @@
 | ACA CLI | `aca --version` | `gh release download v0.1.0b1 --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure-containerapps-cli-*.tgz" --dir /tmp && npm install -g /tmp/azure-containerapps-cli-*.tgz` |
 | Python 3.10+ | `python --version` | [python.org](https://python.org) |
 
-> **No `az` extensions needed.** All connector gateway operations use `az rest` with ARM APIs directly.
-> Sandbox operations use the `aca` CLI. Do NOT use `az sandbox` or `az connectorgateway` — these are not required.
+> **⚠️ There are NO `az` commands for sandboxes.** Gateway = `az rest`. Sandbox = `aca` CLI (preferred) or Python SDK fallback.
+> Do NOT use `az sandbox`, `az sandboxgroup`, or `az connectorgateway`.
+
+## SDK fallback (if aca CLI install fails with 404)
+
+```powershell
+# Check if sandbox SDK is already installed:
+pip show sandbox-sdk 2>$null
+python -c "from sandbox import SandboxClient; print('SDK available')" 2>$null
+# If SDK found: use SandboxClient for sandbox ops (write_file, exec, etc.)
+# Import: try `from sandbox import SandboxClient` first, then `from azure.containerapps.sandbox import SandboxClient`
+```
 
 ## Install Sandbox SDK (for egress setup)
 

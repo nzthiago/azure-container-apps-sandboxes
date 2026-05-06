@@ -61,15 +61,15 @@ curl -sk -X POST "${RUNTIME_URL}/datasets/default/files?folderPath=%2FMyFolder&n
 ## Office 365 — Send email
 
 ```bash
+# Flat body format — works for both dynamicInvoke AND runtime URL calls
 curl -sk -X POST "${RUNTIME_URL}/v2/Mail" \
   -H "Content-Type: application/json" \
   -d '{
-    "emailMessage": {
-      "To": "user@contoso.com",
-      "Subject": "Hello from sandbox",
-      "Body": "<p>This was sent via the connection runtime URL</p>"
-    }
+    "To": "user@contoso.com",
+    "Subject": "Hello from sandbox",
+    "Body": "<p>This was sent via the connection runtime URL</p>"
   }'
+# NOTE: Do NOT wrap in {"emailMessage": {...}} — that returns 400
 ```
 
 ## Office 365 — Get emails (with attachments)

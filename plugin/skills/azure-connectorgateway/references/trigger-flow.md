@@ -48,18 +48,10 @@ az rest --method PUT \
 az rest --method PUT \
   --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/my-rg/providers/Microsoft.Web/connectorGateways/my-gw/connections/o365-conn?api-version=2026-05-01-preview" \
   --body '{"properties":{"api":{"name":"office365"}},"location":"brazilsouth"}'
-
-# Get consent URL and open in browser (EXACT body format required)
-$conn = az rest --method GET `
-  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/my-rg/providers/Microsoft.Web/connectorGateways/my-gw/connections/o365-conn?api-version=2026-05-01-preview" | ConvertFrom-Json
-$body = @{ parameters = @(@{ objectId = $conn.properties.authenticatedUser.name; tenantId = $conn.properties.authenticatedUser.tenantId; redirectUrl = "https://microsoft.com"; parameterName = "token" }) } | ConvertTo-Json -Depth 3 -Compress
-$tmpFile = New-TemporaryFile; Set-Content $tmpFile $body
-$link = az rest --method POST `
-  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/my-rg/providers/Microsoft.Web/connectorGateways/my-gw/connections/o365-conn/listConsentLinks?api-version=2026-05-01-preview" `
-  --body "@$tmpFile" --query "value[0].link" -o tsv
-Remove-Item $tmpFile
-Start-Process $link  # Opens in default browser — NEVER just print the URL
 ```
+
+Then generate consent link and open in browser — see **SKILL.md Step 3** for the exact
+`listConsentLinks` body format and `Start-Process` pattern.
 
 ### Step 3: Set Up a Sandbox
 

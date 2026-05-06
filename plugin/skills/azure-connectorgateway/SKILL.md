@@ -26,51 +26,37 @@ to sandbox apps via direct API calls or event-driven triggers.
 | Rule | Details |
 |------|---------|
 | **No hallucination** | Check `references/` for details. Use `az rest --help` for syntax. |
-| **No notebooks/scripts for setup** | Walk user through interactively. Execute `az rest` commands directly. |
-| **No MCP configs** | Sandbox apps run without an agent. Call connection runtime URL directly via HTTP. Egress transform handles auth. If you reach `mcp-config create`, STOP. |
-| **No guessing dynamic values** | If a parameter has `x-ms-dynamic-*`, you MUST call the API, present results, and wait for user selection. Never assume a team/channel/folder/site. |
-| **Execute, don't ask** | Gather user inputs → execute operations immediately → report result. Never say "Can I run this?" |
-| **Two script types** | Setup = `az rest` commands (no files, no extensions). Handler = Python file deployed to sandbox via `aca sandbox fs write` (calls runtime URL via HTTP). |
-| **SSL in sandbox** | Use `REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt` (preferred). Fallback: `verify=False` + `urllib3.disable_warnings()`. **stderr = trigger failure** — never leave warnings unsuppressed. |
-| **Parallel execution** | Run independent operations (connections, ACLs, egress, dynamic values) as parallel tool calls. |
-| **Tool permissions** | If "Permission denied", ask user to enable autopilot mode, then retry. |
-| **Deploy handler** | Write Python to local file → `aca sandbox fs write` to upload. NEVER pass Python code as inline PowerShell string (f-strings/braces break). |
-| **Trigger body schema** | API uses `connectionDetails` + `notificationDetails` objects, NOT flat fields. The SDK's `create_trigger()` sends `metadata` which the API rejects. Always use `az rest` with `@$tmpFile`. |
-| **exec vs exec_command** | `aca sandbox exec -c "python /app/handler.py"` (shell-interpreted). Do NOT use `exec_command` with spaces in the string — it treats the whole string as a binary path. |
-| **No az extensions** | Do NOT use `az connectorgateway`, `az sandbox`, or `az sandboxgroup`. These are NOT required. All gateway ops = `az rest`. All sandbox ops = `aca` CLI. |
-| **Install aca CLI first** | Before any sandbox operations, check `aca --version`. If missing: `npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-containerapps-cli-1.0.0-beta.1.tgz`. Do NOT try alternative approaches — aca CLI is the only way. |
+| **No notebooks/scripts** | Walk user through interactively. Execute `az rest` commands directly. |
+| **No MCP configs** | Sandbox apps call runtime URL directly via HTTP. If you reach `mcp-config create`, STOP. |
+| **No guessing dynamic values** | `x-ms-dynamic-*` → call API, present results, STOP. Never assume a team/channel/folder/site. |
+| **Execute, don't ask** | Gather inputs → execute immediately → report. Never say "Can I run this?" |
+| **No az extensions** | Gateway = `az rest`. Sandbox = `aca` CLI. Do NOT use `az connectorgateway/sandbox/sandboxgroup`. |
+| **Always `@$tmpFile`** | For `az rest --body` — inline JSON breaks in PowerShell. See [gotchas.md](references/gotchas.md). |
+| **Trigger body schema** | Uses `connectionDetails` + `notificationDetails`. SDK `create_trigger()` is broken. See Step 5B template. |
+| **Handler deploy** | Write to local file → `aca sandbox fs write`. Never inline Python in PowerShell. |
+| **SSL/stderr** | `REQUESTS_CA_BUNDLE` preferred. `verify=False` needs `disable_warnings()`. stderr = trigger failure. See [handler-guide.md](references/handler-guide.md). |
+| **Parallel execution** | Run independent ops (connections, ACLs, egress, dynamic values) as parallel tool calls. |
 
 **When to STOP and ask the user:** Any parameter with dynamic values (teams, channels, folders, sites, lists), choosing integration pattern, OAuth consent. **You must NEVER skip this — always fetch the list and present it.**
 
 **When to EXECUTE immediately:** creating gateways/connections/triggers/policies, deploying handlers, setting egress, installing deps.
 
 ### Step 0: Prerequisites (run silently)
-Before starting, check and install tools. Do NOT ask — just install if missing:
-```powershell
-# Check az login
-az account show --query "{sub:id,tenant:tenantId}" -o json
-# If fails → tell user to run: az login
-
-# Check aca CLI — REQUIRED for all sandbox operations
-aca --version
-# If missing → try install:
-gh release download v0.1.0b1 --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure-containerapps-cli-*.tgz" --dir $env:TEMP
-npm install -g (Get-ChildItem "$env:TEMP/azure-containerapps-cli-*.tgz").FullName
-
-# If aca install fails (404) → check if sandbox SDK is available as fallback:
-pip show sandbox-sdk 2>$null
-python -c "from sandbox import SandboxClient; print('SDK available')" 2>$null
-# If SDK found: use SandboxClient for sandbox ops (write_file, exec, etc.)
-# If neither aca nor SDK available → ask user for help
-```
-> **⚠️ There are NO `az` commands for sandboxes.** Do NOT use `az sandbox`, `az sandboxgroup`,
-> or `az connectorgateway`. Gateway = `az rest`. Sandbox = `aca` CLI (preferred) or Python SDK fallback.
-> SDK import: try `from sandbox import SandboxClient` first, then `from azure.containerapps.sandbox import SandboxClient`.
+Check `az account show` and `aca --version`. If missing, see [prerequisites.md](references/prerequisites.md) for install + SDK fallback.
 
 ### Step 1: Understand the scenario
 Ask the user:
 - "What event do you want to trigger on?" (new email, SharePoint list item, file upload, etc.)
-- Map the answer to a connector: `office365`, `sharepointonline`, `onedriveforbusiness`, etc.
+- Map the answer to a connector using this table:
+
+| User says | Connector name | Common triggers |
+|-----------|---------------|-----------------|
+| Email, Outlook | `office365` | `OnNewEmailV3`, `OnFlaggedEmail` |
+| SharePoint, list | `sharepointonline` | `OnNewItem`, `OnUpdatedItem` |
+| OneDrive, files | `onedriveforbusiness` | `OnNewFile`, `OnUpdatedFile` |
+| Teams | `teams` | `OnNewChannelMessage` |
+| Azure Blob | `azureblob` | `OnNewBlob`, `OnUpdatedBlob` |
+
 - Ask if they already know the trigger operation, or want to discover available ones.
 
 **Stop and wait for the user's answer before continuing.**
@@ -130,47 +116,15 @@ az rest --method PUT \
   --body '{"properties":{"api":{"name":"onedriveforbusiness"}},"location":"{location}"}'
 ```
 
-Generate consent URLs — POST to `listConsentLinks`, then **open each in the user's browser automatically**.
+Generate consent links and open in browser. → **Exact format:** See [consent.md](references/consent.md)
 
-> **⚠️ The body format MUST be exactly as shown below. Do NOT try other formats.**
-
-```powershell
-# Get the connection's objectId and tenantId first
-$conn = az rest --method GET `
-  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/{conn}?api-version=2026-05-01-preview" | ConvertFrom-Json
-$objectId = $conn.properties.authenticatedUser.name
-$tenantId = $conn.properties.authenticatedUser.tenantId
-
-# Build consent body — EXACT format required (parameters array)
-$body = @{
-  parameters = @(@{
-    objectId = $objectId
-    tenantId = $tenantId
-    redirectUrl = "https://microsoft.com"
-    parameterName = "token"
-  })
-} | ConvertTo-Json -Depth 3 -Compress
-
-# Post and open in browser
-$tmpFile = New-TemporaryFile
-Set-Content $tmpFile $body
-$link = az rest --method POST `
-  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/{conn}/listConsentLinks?api-version=2026-05-01-preview" `
-  --body "@$tmpFile" --query "value[0].link" -o tsv
-Remove-Item $tmpFile
-Start-Process $link
-```
-
-> **⚠️ ALWAYS use `Start-Process` to open consent links in the browser.**
-> Do NOT just print the URL — it's too long to copy and must be opened automatically.
-> Use `"redirectUrl":"https://microsoft.com"` — default redirect is broken.
-> Consent is auto-confirmed during the flow; no code pasting needed.
-> **Do NOT retry with different body formats** — if consent fails, it's a service issue.
+> **⚠️ Use `Start-Process` to open links. Body MUST use `parameters` array with
+> `objectId`/`tenantId` from the connection. Do NOT try other formats or print the URL.**
 
 Ask user to authenticate (use `ask_user`), then verify:
 ```bash
 az rest --method GET \
-  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections?api-version=2026-05-01-preview" \
+  --url ".../{gw}/connections?api-version=2026-05-01-preview" \
   --query "value[].{name:name, status:properties.statuses[0].status}"
 # All should show: Connected. If not, re-consent.
 ```
@@ -191,112 +145,31 @@ Ask the user:
 
 ### Step 5A: Direct API calls via dynamicInvoke
 
-Call connector operations via `az rest` to the ARM `dynamicInvoke` endpoint.
-Gateway injects stored OAuth credentials. **Use `request` format (NOT `parameters`).**
+→ **Full details:** See [direct-api.md](references/direct-api.md)
 
-> **⚠️ Do NOT include `Content-*` headers in the request object.**
+**Summary:** Call `dynamicInvoke` endpoint with `{"request": {"method":"...", "path":"...", "queries":{}, "body":...}}`.
+Do NOT include `Content-*` headers. Gateway injects stored OAuth credentials.
 
-1. **Select the operation** based on user's goal:
-   ```bash
-   az rest --method POST \
-     --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/listOperations?api-version=2026-05-01-preview" \
-     --body '{"connectorName":"{connector}"}'
-   ```
-   Match user's intent to the best operation. If ambiguous, ask with specific choices.
-   Do NOT dump all operations for the user — choose the right one yourself.
+```bash
+# List operations for a connector
+az rest --method POST \
+  --url ".../{gw}/listOperations?api-version=2026-05-01-preview" \
+  --body '{"connectorName":"{connector}"}'
 
-2. **Collect parameter values interactively.** For each required parameter, check
-   its Swagger extension. Use `@$tmpFile` for `az rest --body` with special chars.
+# Call an operation
+az rest --method POST \
+  --url ".../{gw}/connections/{conn}/dynamicInvoke?api-version=2026-05-01-preview" \
+  --body '{"request":{"method":"POST","path":"/v2/Mail","body":{...}}}'
+```
 
-   > **🚫 NEVER guess or infer dynamic parameter values. NEVER use placeholder IDs.**
-   > If a parameter has `x-ms-dynamic-values`, `x-ms-dynamic-list`, `x-ms-dynamic-tree`,
-   > or `x-ms-dynamic-schema`, you MUST:
-   > 1. Call the specified operationId via `dynamicInvoke` to fetch the actual values
-   > 2. Present the results to the user with `ask_user`
-   > 3. STOP and wait for the user to select — do NOT proceed until they answer
-   >
-   > **Wrong:** "I'll use the Inbox folder" (guessed without calling the API)
-   > **Wrong:** Using a teamId/channelId/siteUrl without fetching the list first
-   > **Right:** Call the dynamic operation → show user the list → wait for selection
+> **🚫 Dynamic values:** If a parameter has `x-ms-dynamic-*`, STOP — call the API,
+> present results, wait for user selection. NEVER guess folder/site/channel IDs.
 
-   **Parameter resolution by extension type:**
+**If deploying to sandbox:** Set up ACL + egress. See [egress-setup.md](references/egress-setup.md).
+- Token resource: `https://management.core.windows.net/`
+- Header format: `"Bearer {value}"`
 
-   | Extension | What it does | How to handle |
-   |-----------|-------------|---------------|
-   | `x-ms-dynamic-values` | Flat list of options | Call operationId → present choices → **STOP** |
-   | `x-ms-dynamic-list` | Same as above (nested variant) | Same as dynamic-values → **STOP** |
-   | `x-ms-dynamic-tree` | Hierarchical folder browsing | Call open → present → browse deeper → **STOP at each level** |
-   | `x-ms-dynamic-schema` | Fields depend on prior selection | Collect dependencies first → call schema op → **STOP** |
-   | Static enum | Fixed choices in Swagger | Present choices → **STOP** |
-   | Free-form | User provides value | Ask user (or use obvious default + inform) |
-
-   → **Full algorithms with code examples:** See [dynamic-values.md](references/dynamic-values.md)
-
-   **Key rules:**
-   - **STOP at every dynamic parameter** — even if you think you know the answer.
-     The user's Teams, channels, SharePoint sites, and folders are NOT predictable.
-   - **Always resolve `operationId` to HTTP path** from the Swagger — do NOT guess
-   - **Always URL-encode IDs** with `[System.Uri]::EscapeDataString()`
-   - **Use `@file` pattern** for `az rest --body` when IDs contain `!` or special chars
-   - **Skip optional parameters** unless user mentioned them
-   - **Large lists (>10 items):** Do NOT pass all items as `ask_user` choices.
-     Instead, print the numbered list in your response text and use `ask_user`
-     with `allow_freeform: true` (no `choices` array): "Type the name or number."
-     Only use the `choices` array when there are ≤10 items.
-   - **Very large lists (50+):** Fetch with `$top=20`, show results, ask
-     "Do you see yours, or should I load more?"
-
-   **Do NOT proceed to step 3 until ALL required parameters are confirmed by the user.**
-
-3. **Build and call `dynamicInvoke`.** The request object supports:
-   - `method` — HTTP method (GET, POST, PUT, DELETE)
-   - `path` — operation path from Swagger (strip `/{connectionId}` prefix)
-   - `queries` — query parameters as key-value dict
-   - `body` — request body (string or object)
-   - `headers` — HTTP headers (**except** `Content-*` headers)
-
-   Map Swagger `in` field: `path` → URL path, `query` → queries dict,
-   `body` → body field, `header` → headers dict (except `Content-*`).
-
-   ```bash
-   # Example: Create a file in OneDrive
-   az rest --method POST \
-     --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/{conn}/dynamicInvoke?api-version=2026-05-01-preview" \
-     --body '{
-       "request": {
-         "method": "POST",
-         "path": "/datasets/default/files",
-         "queries": {"folderPath": "/", "name": "hello.txt"},
-         "body": "Hello from Connector Gateway!"
-       }
-     }'
-   ```
-
-   → **More examples:** See [runtime-url-examples.md](references/runtime-url-examples.md)
-
-4. **If running from a sandbox**, set up ACL + egress (run in parallel):
-   ```bash
-   # Get runtime URL host
-   az rest --method GET \
-     --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/{conn}?api-version=2026-05-01-preview" \
-     --query "properties.connectionRuntimeUrl" -o tsv
-   ```
-   Then set egress transform. **Critical values:**
-   - Token resource: `https://management.core.windows.net/` (NOT `management.azure.com`)
-   - Header format: `"Bearer {value}"` (NOT `{token}`)
-   - Sandbox MUST be running before setting egress
-   - One rule covers all connections on same gateway host
-
-   → **Full egress setup code + troubleshooting:** See [egress-setup.md](references/egress-setup.md)
-   → **Runtime URL examples for sandbox apps:** See [runtime-url-examples.md](references/runtime-url-examples.md)
-
-   **Two auth patterns:**
-   | Context | Pattern |
-   |---------|---------|
-   | **Setup** (dynamic values, testing) | `dynamicInvoke` via ARM (uses Azure CLI identity) |
-   | **Sandbox runtime** (deployed handler) | `connectionRuntimeUrl` + egress transform (uses sandbox MI) |
-
-**→ Skip to Final verification checklist (Direct API).**
+**→ Skip to Final verification checklist.**
 
 ---
 
@@ -388,6 +261,8 @@ az rest --method GET --url ".../connectorGateways/{gw}/triggerConfigs/{name}?api
 
 ## References
 
+- [direct-api.md](references/direct-api.md) — Full dynamicInvoke details, parameter resolution, examples
+- [consent.md](references/consent.md) — OAuth consent link generation (exact body format)
 - [trigger-setup.md](references/trigger-setup.md) — Full trigger creation commands (Steps 5B–9B)
 - [handler-guide.md](references/handler-guide.md) — Handler development, event delivery, templates
 - [dynamic-values.md](references/dynamic-values.md) — Dynamic parameter resolution algorithms
