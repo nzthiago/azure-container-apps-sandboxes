@@ -114,11 +114,17 @@ selected_name = selected_op.get("name", selected_op.get("operationId"))
 trigger_type = selected_op.get("properties", {}).get("trigger", "")
 print(f"\n  Selected: {selected_name}")
 
-# Recurrence-based (batch/polling) triggers fire every ~3 minutes by default.
-# Inform the user so they can adjust if needed.
-if trigger_type in ("batch", "Batch"):
-    print(f"\n  ⚠️  This is a polling trigger — it checks for new items every ~3 minutes by default.")
-    print(f"      The recurrence interval can be configured via the 'recurrence' parameter if supported.")
+# Polling/recurrence trigger detection:
+# If the trigger operation does NOT have x-ms-notification AND does NOT have
+# x-ms-notification-content in its Swagger definition, it is a recurrence trigger.
+# Only in that case, inform the user about the default polling interval.
+if trigger_type in ("batch", "Batch", "single", "Single"):
+    # NOTE: To determine if this is a recurrence trigger, check the Swagger for
+    # the operation. If it lacks both x-ms-notification and x-ms-notification-content,
+    # it's a recurrence/polling trigger regardless of single/batch.
+    print(f"\n  ℹ️  Check Swagger for this operation to determine if it's a recurrence trigger.")
+    print(f"      If no x-ms-notification and no x-ms-notification-content → it's a polling trigger.")
+    print(f"      Default recurrence: every 3 minutes. Ask user if they want to change it.")
 
 # =========================================================================
 # Step 2: Create Access Policy + RBAC (required before trigger creation)

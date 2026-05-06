@@ -12,11 +12,16 @@ az rest --method GET \
 ```
 Present operations as choices (summary + operationId). Let user pick.
 
-> **⚠️ Recurrence/polling triggers** (trigger type = `batch`): These check for new items on a
-> polling interval — **default is every ~3 minutes**. After the user selects a batch trigger,
-> ask: "This trigger polls every ~3 minutes by default. Would you like a different interval?"
-> If yes, add a `recurrence` parameter (e.g., `{"name": "recurrence", "value": {"frequency": "Minute", "interval": 15}}`).
-> Real-time triggers (type = `single`) fire immediately on events — no polling interval.
+> **⚠️ Identifying recurrence/polling triggers:** Check the Swagger definition for the selected operation.
+> If the operation does **NOT** have `x-ms-notification` AND does **NOT** have `x-ms-notification-content`,
+> it is a **recurrence/polling trigger** (this applies to both `single` and `batch` trigger types).
+>
+> Only for recurrence triggers: inform the user — "This trigger polls every 3 minutes by default.
+> Would you like a different interval?" If yes, add a `recurrence` parameter
+> (e.g., `{"name": "recurrence", "value": {"frequency": "Minute", "interval": 15}}`).
+>
+> If the operation HAS `x-ms-notification` or `x-ms-notification-content`, it is a
+> notification/webhook trigger — it fires on events and does NOT poll. Do not mention recurrence.
 
 ## Step 6B: Collect trigger parameters
 
