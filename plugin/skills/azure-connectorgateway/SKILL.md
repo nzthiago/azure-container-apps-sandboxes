@@ -2,24 +2,39 @@
 name: azure-connectorgateway
 description: |
   Azure Connector Gateway — manage gateways, connections, and triggers.
-  Connects external services (Office 365, GitHub, Azure Blob) to sandbox apps
-  via event-driven triggers or direct API calls using connection runtime URLs.
+  Connects external services (Office 365, Teams, Microsoft Forms, SharePoint,
+  OneDrive, GitHub, Azure Blob) to sandbox apps via event-driven triggers or
+  direct API calls using connection runtime URLs.
   Use when:
   - Creating or managing connector gateways and connections
   - Creating or managing trigger configs on a connector gateway
-  - Subscribing to connector events (email, file, webhook)
+  - Subscribing to connector events (email, file, webhook, form submission, Teams message)
   - Wiring event sources to sandbox callbacks
   - Managing trigger lifecycle (enable, disable, delete)
-  - Building sandbox apps that call connector APIs (send email, upload files, etc.)
+  - Building sandbox apps that call connector APIs (send email, upload files, post Teams message, etc.)
+  - Reacting to events from one service and calling another (e.g., "when a form is submitted, send a Teams message")
+  - Automating workflows across Microsoft 365 services (Forms, Teams, Outlook, SharePoint, OneDrive)
   Triggers: "create trigger", "trigger config", "webhook trigger",
   "connector gateway", "connection", "email trigger", "send email",
-  "onedrive", "sharepoint"
+  "onedrive", "sharepoint", "teams", "teams message", "post message",
+  "microsoft forms", "forms", "form response", "form submission",
+  "notify", "notification", "automate", "when", "on new"
 ---
 
 # Azure Connector Gateway
 
 Manage connector gateways, connections, and triggers — connect external services
 to sandbox apps via direct API calls or event-driven triggers.
+
+## Common scenarios
+
+| User request | Pattern | Connectors involved |
+|---|---|---|
+| "Send a Teams message when a form is submitted" | Trigger (Forms) + Direct API (Teams) | `microsoftforms`, `teams` |
+| "Notify a channel when a file is uploaded" | Trigger (OneDrive/Blob) + Direct API (Teams) | `onedriveforbusiness`/`azureblob`, `teams` |
+| "Send an email when a SharePoint list item changes" | Trigger (SharePoint) + Direct API (Office 365) | `sharepointonline`, `office365` |
+| "Post to Teams when a new email arrives" | Trigger (Office 365) + Direct API (Teams) | `office365`, `teams` |
+| "Save form responses to SharePoint" | Trigger (Forms) + Direct API (SharePoint) | `microsoftforms`, `sharepointonline` |
 
 ## Rules (MUST follow)
 
@@ -55,6 +70,7 @@ Ask the user:
 | SharePoint, list | `sharepointonline` | `OnNewItem`, `OnUpdatedItem` |
 | OneDrive, files | `onedriveforbusiness` | `OnNewFile`, `OnUpdatedFile` |
 | Teams | `teams` | `OnNewChannelMessage` |
+| Forms, survey, quiz | `microsoftforms` | `OnFormResponse`, `OnNewResponse` |
 | Azure Blob | `azureblob` | `OnNewBlob`, `OnUpdatedBlob` |
 
 - Ask if they already know the trigger operation, or want to discover available ones.

@@ -21,7 +21,7 @@
     {
       "name": "azure-connectorgateway",
       "source": "./plugin",
-      "description": "Azure Connector Gateway — manage gateways, connections, triggers, and MCP configs for sandbox automation.",
+      "description": "Azure Connector Gateway — manage gateways, connections, triggers, and MCP configs for sandbox automation. Automate cross-service workflows (Microsoft Forms, Teams, Outlook, SharePoint, OneDrive, GitHub, Azure Blob).",
       "version": "0.1.0",
       "skills": [
         "./plugin/skills/azure-connectorgateway"
