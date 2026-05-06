@@ -34,102 +34,121 @@
 
 ### Step 1: Create Connector Gateway with SystemAssigned Identity
 
-```python
-from azure.connectorgateway import ConnectorGatewayClient
-
-conn_client = ConnectorGatewayClient(resource_group="my-rg")
-gw = conn_client.create_gateway("my-gw", location="brazilsouth",
-    identity={"type": "SystemAssigned"})
-gw_principal_id = gw["identity"]["principalId"]
-gw_tenant_id = gw["identity"]["tenantId"]
+```bash
+az rest --method PUT \
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/my-rg/providers/Microsoft.Web/connectorGateways/my-gw?api-version=2026-05-01-preview" \
+  --body '{"location":"brazilsouth","identity":{"type":"SystemAssigned"}}' \
+  --query "{principalId:identity.principalId, tenantId:identity.tenantId}"
 ```
 
 ### Step 2: Create Connection + OAuth Consent
 
-```python
-conn = conn_client.create_connection("my-gw", "o365-conn",
-    connector_name="office365")
-link = conn_client.generate_consent_link("my-gw", "o365-conn")
-# Open link → authorize → confirm consent
+```bash
+# Create connection
+az rest --method PUT \
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/my-rg/providers/Microsoft.Web/connectorGateways/my-gw/connections/o365-conn?api-version=2026-05-01-preview" \
+  --body '{"properties":{"api":{"name":"office365"}},"location":"brazilsouth"}'
+
+# Get consent URL and open in browser (EXACT body format required)
+$conn = az rest --method GET `
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/my-rg/providers/Microsoft.Web/connectorGateways/my-gw/connections/o365-conn?api-version=2026-05-01-preview" | ConvertFrom-Json
+$body = @{ parameters = @(@{ objectId = $conn.properties.authenticatedUser.name; tenantId = $conn.properties.authenticatedUser.tenantId; redirectUrl = "https://microsoft.com"; parameterName = "token" }) } | ConvertTo-Json -Depth 3 -Compress
+$tmpFile = New-TemporaryFile; Set-Content $tmpFile $body
+$link = az rest --method POST `
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/my-rg/providers/Microsoft.Web/connectorGateways/my-gw/connections/o365-conn/listConsentLinks?api-version=2026-05-01-preview" `
+  --body "@$tmpFile" --query "value[0].link" -o tsv
+Remove-Item $tmpFile
+Start-Process $link  # Opens in default browser — NEVER just print the URL
 ```
 
 ### Step 3: Set Up a Sandbox
 
-```python
-from azure.sandbox import SandboxClient
-from azure.mgmt.sandbox import SandboxGroupManagementClient
+```bash
+# Create sandbox group (uses aca CLI from azure-sandbox skill)
+aca sandboxgroup create -g my-rg -n my-sg -l eastus2
 
-mgmt = SandboxGroupManagementClient(resource_group="my-rg")
-mgmt.create_group("my-sg", location="eastus2")
-
-sbx_client = SandboxClient(resource_group="my-rg")
-sbx = sbx_client.create_sandbox("my-sg", disk="ubuntu")
-sandbox_id = sbx["id"]
+# Create sandbox
+aca sandbox create -g my-rg --group my-sg --disk ubuntu
 ```
 
 ### Step 4: Create Trigger Config
 
-```python
-from azure.connectorgateway import TriggerClient
+```powershell
+# Build trigger body — ShellCommand example
+# NOTE: API uses connectionDetails + notificationDetails (NOT flat connectorName/operationName)
+$triggerBody = @{
+  properties = @{
+    connectionDetails = @{
+      connectorName = "office365"
+      connectionName = "o365-conn"
+    }
+    notificationDetails = @{
+      operationName = "OnNewEmailV3"
+      parameters = @(
+        @{ name = "folderPath"; value = "Inbox" }
+      )
+    }
+    callbackTarget = @{
+      sandboxId = "{sandbox_id}"
+      sandboxGroupName = "my-sg"
+      command = "python /app/handle_email.py"
+    }
+  }
+} | ConvertTo-Json -Depth 6 -Compress
 
-trigger_client = TriggerClient(resource_group="my-rg")
+$tmpBody = New-TemporaryFile; Set-Content $tmpBody $triggerBody
+az rest --method PUT `
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/my-rg/providers/Microsoft.Web/connectorGateways/my-gw/triggerConfigs/email-handler?api-version=2026-05-01-preview" `
+  --body "@$tmpBody"
+Remove-Item $tmpBody
 
-# ShellCommand target (shell-interpreted command string)
-trigger = trigger_client.create_trigger("my-gw", "email-handler",
-    connector_name="office365",
-    connection_name="o365-conn",
-    operation_name="OnNewEmailV3",
-    sandbox_id=sandbox_id,
-    sandbox_group="my-sg",
-    command="python /app/handle_email.py",
-    parameters=[{"name": "folderPath", "value": "Inbox"}])
-
-# ExecuteCommand target (direct exec, no shell)
-trigger = trigger_client.create_trigger("my-gw", "cmd-handler",
-    connector_name="office365",
-    connection_name="o365-conn",
-    operation_name="OnNewEmailV3",
-    sandbox_id=sandbox_id,
-    sandbox_group="my-sg",
-    execute_command="python",
-    execute_args=["/app/handle_email.py", "--verbose"],
-    parameters=[{"name": "folderPath", "value": "Inbox"}])
-
-# InvokePort target (HTTP call to sandbox port)
-trigger = trigger_client.create_trigger("my-gw", "webhook-handler",
-    connector_name="office365",
-    connection_name="o365-conn",
-    operation_name="OnNewEmailV3",
-    sandbox_id=sandbox_id,
-    sandbox_group="my-sg",
-    port=5000,
-    port_path="/webhook",
-    parameters=[{"name": "folderPath", "value": "Inbox"}])
+# For InvokePort target, replace callbackTarget with:
+#   "port" = 5000; "portPath" = "/webhook"; "httpMethod" = "POST"
+# For ExecuteCommand target, replace with:
+#   "executeCommand" = "python"; "executeArgs" = @("/app/handle_email.py", "--verbose")
 ```
 
 ### Step 5: Grant Access Policy
 
-```python
-conn_client.create_access_policy("my-gw", "o365-conn",
-    principal_id=gw_principal_id,
-    tenant_id=gw_tenant_id,
-    location="brazilsouth")
+```powershell
+$aclBody = @{
+  location = "brazilsouth"
+  properties = @{
+    principal = @{
+      type = "ActiveDirectory"
+      identity = @{ objectId = "{gw_principal_id}"; tenantId = "{gw_tenant_id}" }
+    }
+  }
+} | ConvertTo-Json -Depth 5 -Compress
+
+az rest --method PUT `
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/my-rg/providers/Microsoft.Web/connectorGateways/my-gw/connections/o365-conn/accessPolicies/gateway-acl?api-version=2026-05-01-preview" `
+  --body $aclBody
 ```
 
 ### Step 6: Discover Trigger Operations (optional)
 
-```python
-ops = trigger_client.list_trigger_operations("my-gw", "office365")
-for op in ops:
-    print(f"  {op['operationId']}: {op['summary']} ({op['triggerType']})")
+```bash
+az rest --method POST \
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/my-rg/providers/Microsoft.Web/connectorGateways/my-gw/listOperations?api-version=2026-05-01-preview" \
+  --body '{"connectorName":"office365"}'
+# Filter for trigger operations (triggerType field present)
 ```
 
 ### Step 7: Manage Trigger Lifecycle
 
-```python
-trigger_client.disable_trigger("my-gw", "email-handler")
-trigger_client.enable_trigger("my-gw", "email-handler")
-trigger_client.delete_trigger("my-gw", "email-handler")
+```bash
+# Disable
+az rest --method POST \
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/my-rg/providers/Microsoft.Web/connectorGateways/my-gw/triggerConfigs/email-handler/disable?api-version=2026-05-01-preview"
+
+# Enable
+az rest --method POST \
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/my-rg/providers/Microsoft.Web/connectorGateways/my-gw/triggerConfigs/email-handler/enable?api-version=2026-05-01-preview"
+
+# Delete
+az rest --method DELETE \
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/my-rg/providers/Microsoft.Web/connectorGateways/my-gw/triggerConfigs/email-handler?api-version=2026-05-01-preview"
 ```
 
 ## Trigger Source Parameters

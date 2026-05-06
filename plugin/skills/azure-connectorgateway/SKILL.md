@@ -25,19 +25,47 @@ to sandbox apps via direct API calls or event-driven triggers.
 
 | Rule | Details |
 |------|---------|
-| **No hallucination** | Use `--help` on any command. Check `references/` for details. |
-| **No notebooks/scripts for setup** | Walk user through interactively. Execute `az` commands directly. |
+| **No hallucination** | Check `references/` for details. Use `az rest --help` for syntax. |
+| **No notebooks/scripts for setup** | Walk user through interactively. Execute `az rest` commands directly. |
 | **No MCP configs** | Sandbox apps run without an agent. Call connection runtime URL directly via HTTP. Egress transform handles auth. If you reach `mcp-config create`, STOP. |
 | **No guessing dynamic values** | If a parameter has `x-ms-dynamic-*`, you MUST call the API, present results, and wait for user selection. Never assume a team/channel/folder/site. |
 | **Execute, don't ask** | Gather user inputs → execute operations immediately → report result. Never say "Can I run this?" |
-| **Two script types** | Setup = `az` CLI commands (no files). Handler = Python file deployed to sandbox (calls runtime URL via HTTP). |
+| **Two script types** | Setup = `az rest` commands (no files, no extensions). Handler = Python file deployed to sandbox via `aca sandbox fs write` (calls runtime URL via HTTP). |
 | **SSL in sandbox** | Use `REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt` (preferred). Fallback: `verify=False` + `urllib3.disable_warnings()`. **stderr = trigger failure** — never leave warnings unsuppressed. |
 | **Parallel execution** | Run independent operations (connections, ACLs, egress, dynamic values) as parallel tool calls. |
 | **Tool permissions** | If "Permission denied", ask user to enable autopilot mode, then retry. |
+| **Deploy handler** | Write Python to local file → `aca sandbox fs write` to upload. NEVER pass Python code as inline PowerShell string (f-strings/braces break). |
+| **Trigger body schema** | API uses `connectionDetails` + `notificationDetails` objects, NOT flat fields. The SDK's `create_trigger()` sends `metadata` which the API rejects. Always use `az rest` with `@$tmpFile`. |
+| **exec vs exec_command** | `aca sandbox exec -c "python /app/handler.py"` (shell-interpreted). Do NOT use `exec_command` with spaces in the string — it treats the whole string as a binary path. |
+| **No az extensions** | Do NOT use `az connectorgateway`, `az sandbox`, or `az sandboxgroup`. These are NOT required. All gateway ops = `az rest`. All sandbox ops = `aca` CLI. |
+| **Install aca CLI first** | Before any sandbox operations, check `aca --version`. If missing: `npm install -g https://github.com/Azure-Samples/azure-container-apps-sandboxes/releases/download/v0.1.0b1/azure-containerapps-cli-1.0.0-beta.1.tgz`. Do NOT try alternative approaches — aca CLI is the only way. |
 
 **When to STOP and ask the user:** Any parameter with dynamic values (teams, channels, folders, sites, lists), choosing integration pattern, OAuth consent. **You must NEVER skip this — always fetch the list and present it.**
 
 **When to EXECUTE immediately:** creating gateways/connections/triggers/policies, deploying handlers, setting egress, installing deps.
+
+### Step 0: Prerequisites (run silently)
+Before starting, check and install tools. Do NOT ask — just install if missing:
+```powershell
+# Check az login
+az account show --query "{sub:id,tenant:tenantId}" -o json
+# If fails → tell user to run: az login
+
+# Check aca CLI — REQUIRED for all sandbox operations
+aca --version
+# If missing → try install:
+gh release download v0.1.0b1 --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure-containerapps-cli-*.tgz" --dir $env:TEMP
+npm install -g (Get-ChildItem "$env:TEMP/azure-containerapps-cli-*.tgz").FullName
+
+# If aca install fails (404) → check if sandbox SDK is available as fallback:
+pip show sandbox-sdk 2>$null
+python -c "from sandbox import SandboxClient; print('SDK available')" 2>$null
+# If SDK found: use SandboxClient for sandbox ops (write_file, exec, etc.)
+# If neither aca nor SDK available → ask user for help
+```
+> **⚠️ There are NO `az` commands for sandboxes.** Do NOT use `az sandbox`, `az sandboxgroup`,
+> or `az connectorgateway`. Gateway = `az rest`. Sandbox = `aca` CLI (preferred) or Python SDK fallback.
+> SDK import: try `from sandbox import SandboxClient` first, then `from azure.containerapps.sandbox import SandboxClient`.
 
 ### Step 1: Understand the scenario
 Ask the user:
@@ -48,22 +76,41 @@ Ask the user:
 **Stop and wait for the user's answer before continuing.**
 
 ### Step 2: Gateway setup
+
+> **⚡ Parallel batch:** Once you know the gateway name, run ALL of these in one parallel call:
+> 1. Get gateway info (principalId, tenantId, location)
+> 2. List existing connections (names, statuses, runtime URLs)
+> 3. Get sandbox group identity (if sandbox already exists)
+>
+> This avoids sequential round-trips and saves ~2 minutes.
+
+> **ARM base URL:** `https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways`
+> **API version:** `api-version=2026-05-01-preview`
+> Use `az account show --query id -o tsv` to get the subscription ID.
+
 Ask the user:
 - "Do you have an existing connector gateway, or should I create a new one?"
 - If **existing**: ask for resource group + gateway name, then retrieve it:
   ```bash
-  az connectorgateway gateway show -g {rg} -n {gw} --query "{name:name, principalId:identity.principalId, tenantId:identity.tenantId}" -o json
+  az rest --method GET \
+    --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}?api-version=2026-05-01-preview" \
+    --query "{name:name, principalId:identity.principalId, tenantId:identity.tenantId}"
   ```
 - If **new**: ask for resource group + gateway name + location, then **create it
   immediately** with a SystemAssigned managed identity (required for trigger callbacks):
   ```bash
-  az connectorgateway gateway create -g {rg} -n {gw} -l {location} --identity SystemAssigned --query "{name:name, principalId:identity.principalId, tenantId:identity.tenantId}" -o json
+  az rest --method PUT \
+    --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}?api-version=2026-05-01-preview" \
+    --body '{"location":"{location}","identity":{"type":"SystemAssigned"}}' \
+    --query "{name:name, principalId:identity.principalId, tenantId:identity.tenantId}"
   ```
 - **Always** capture `principalId` and `tenantId` — they are needed later for
   access policies and InvokePort auth.
 - List existing connections:
   ```bash
-  az connectorgateway connection list -g {rg} --gateway {gw} -o table
+  az rest --method GET \
+    --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections?api-version=2026-05-01-preview" \
+    --query "value[].{name:name, status:properties.statuses[0].status, api:properties.api.name}"
   ```
 
 **Once you have the gateway info, proceed immediately to Step 3.**
@@ -74,19 +121,57 @@ Create ALL needed connections in parallel, then consent all at once:
 
 ```bash
 # Create connections (parallel tool calls if multiple):
-az connectorgateway connection create -g {rg} --gateway {gw} -n o365-conn --api office365 -l {location} -o json
-az connectorgateway connection create -g {rg} --gateway {gw} -n onedrive-conn --api onedriveforbusiness -l {location} -o json
+az rest --method PUT \
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/o365-conn?api-version=2026-05-01-preview" \
+  --body '{"properties":{"api":{"name":"office365"}},"location":"{location}"}'
+
+az rest --method PUT \
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/onedrive-conn?api-version=2026-05-01-preview" \
+  --body '{"properties":{"api":{"name":"onedriveforbusiness"}},"location":"{location}"}'
 ```
 
-Generate consent URLs with `--redirect-url "https://microsoft.com"` (avoids broken default redirect):
-```bash
-az connectorgateway connection consent -g {rg} --gateway {gw} -n {conn} --redirect-url "https://microsoft.com" -o tsv
-# Open the URL in browser for user
+Generate consent URLs — POST to `listConsentLinks`, then **open each in the user's browser automatically**.
+
+> **⚠️ The body format MUST be exactly as shown below. Do NOT try other formats.**
+
+```powershell
+# Get the connection's objectId and tenantId first
+$conn = az rest --method GET `
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/{conn}?api-version=2026-05-01-preview" | ConvertFrom-Json
+$objectId = $conn.properties.authenticatedUser.name
+$tenantId = $conn.properties.authenticatedUser.tenantId
+
+# Build consent body — EXACT format required (parameters array)
+$body = @{
+  parameters = @(@{
+    objectId = $objectId
+    tenantId = $tenantId
+    redirectUrl = "https://microsoft.com"
+    parameterName = "token"
+  })
+} | ConvertTo-Json -Depth 3 -Compress
+
+# Post and open in browser
+$tmpFile = New-TemporaryFile
+Set-Content $tmpFile $body
+$link = az rest --method POST `
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/{conn}/listConsentLinks?api-version=2026-05-01-preview" `
+  --body "@$tmpFile" --query "value[0].link" -o tsv
+Remove-Item $tmpFile
+Start-Process $link
 ```
+
+> **⚠️ ALWAYS use `Start-Process` to open consent links in the browser.**
+> Do NOT just print the URL — it's too long to copy and must be opened automatically.
+> Use `"redirectUrl":"https://microsoft.com"` — default redirect is broken.
+> Consent is auto-confirmed during the flow; no code pasting needed.
+> **Do NOT retry with different body formats** — if consent fails, it's a service issue.
 
 Ask user to authenticate (use `ask_user`), then verify:
 ```bash
-az connectorgateway connection list -g {rg} --gateway {gw} --query "[].{name:name, status:properties.statuses[0].status}" -o table
+az rest --method GET \
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections?api-version=2026-05-01-preview" \
+  --query "value[].{name:name, status:properties.statuses[0].status}"
 # All should show: Connected. If not, re-consent.
 ```
 
@@ -113,7 +198,9 @@ Gateway injects stored OAuth credentials. **Use `request` format (NOT `parameter
 
 1. **Select the operation** based on user's goal:
    ```bash
-   az connectorgateway trigger operations list -g {rg} --gateway {gw} --connector-type {connector} -o table
+   az rest --method POST \
+     --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/listOperations?api-version=2026-05-01-preview" \
+     --body '{"connectorName":"{connector}"}'
    ```
    Match user's intent to the best operation. If ambiguous, ask with specific choices.
    Do NOT dump all operations for the user — choose the right one yourself.
@@ -190,7 +277,9 @@ Gateway injects stored OAuth credentials. **Use `request` format (NOT `parameter
 4. **If running from a sandbox**, set up ACL + egress (run in parallel):
    ```bash
    # Get runtime URL host
-   az connectorgateway connection show -g {rg} --gateway {gw} -n {conn} --query "properties.connectionRuntimeUrl" -o tsv
+   az rest --method GET \
+     --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/{conn}?api-version=2026-05-01-preview" \
+     --query "properties.connectionRuntimeUrl" -o tsv
    ```
    Then set egress transform. **Critical values:**
    - Token resource: `https://management.core.windows.net/` (NOT `management.azure.com`)
@@ -214,6 +303,31 @@ Gateway injects stored OAuth credentials. **Use `request` format (NOT `parameter
 ### Step 5B: Event-driven triggers
 
 → **Full trigger setup commands (Steps 5B–9B):** See [trigger-setup.md](references/trigger-setup.md)
+
+**Trigger body template (copy-paste ready):**
+```powershell
+$triggerBody = @{
+  properties = @{
+    connectionDetails = @{ connectorName = "{connector}"; connectionName = "{conn}" }
+    notificationDetails = @{
+      operationName = "{operation}"
+      parameters = @( @{ name = "{param}"; value = "{value}" } )
+    }
+    callbackTarget = @{
+      sandboxId = "{sandbox_id}"; sandboxGroupName = "{sg}"
+      command = "python /app/handler.py"  # ShellCommand
+      # OR: port = 5000; portPath = "/webhook"; httpMethod = "POST"  # InvokePort
+    }
+  }
+} | ConvertTo-Json -Depth 6 -Compress
+$tmp = New-TemporaryFile; Set-Content $tmp $triggerBody
+az rest --method PUT `
+  --url ".../{gw}/triggerConfigs/{name}?api-version=2026-05-01-preview" `
+  --body "@$tmp"
+Remove-Item $tmp
+```
+> **⚠️ Do NOT use the Python SDK `create_trigger()`** — it sends a `metadata` field the API rejects.
+> Always use `az rest` with the schema above (`connectionDetails` + `notificationDetails`).
 
 **Summary of the trigger flow:**
 1. Discover trigger operations → present to user → STOP and wait
@@ -249,29 +363,28 @@ See [handler-guide.md](references/handler-guide.md) for handler development.
 
 After setup → deploy the handler app. See [handler-guide.md](references/handler-guide.md).
 
-## Install
-
-```bash
-# az CLI extension
-gh release download --repo Azure-Samples/azure-container-apps-sandboxes --pattern "az_cli_connectorgateway-*-py3-none-any.whl" --dir /tmp
-az extension add --source /tmp/az_cli_connectorgateway-*-py3-none-any.whl
-
-# Python SDK
-gh release download --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_connectorgateway-*-py3-none-any.whl" --dir /tmp
-pip install /tmp/azure_connectorgateway-*-py3-none-any.whl
-```
-
 ## Quick reference
 
 ```bash
-az connectorgateway gateway show -g {rg} -n {gw} -o json
-az connectorgateway connection list -g {rg} --gateway {gw} -o table
-az connectorgateway trigger list -g {rg} --gateway {gw} -o table
-az connectorgateway trigger operations list -g {rg} --gateway {gw} --connector-type {type}
-az connectorgateway trigger create -g {rg} --gateway {gw} -n {name} --connector-name {conn_type} --connection-name {conn} --operation-name {op} --sandbox-id {id} -s {sg} --port 5000 --port-path /webhook
-```
+# ARM base: https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways
+# API version: api-version=2026-05-01-preview
 
-Run `az connectorgateway --help` or `help(TriggerClient)` for full API.
+# Gateway
+az rest --method GET --url ".../connectorGateways/{gw}?api-version=2026-05-01-preview"
+
+# Connections
+az rest --method GET --url ".../connectorGateways/{gw}/connections?api-version=2026-05-01-preview"
+
+# List operations
+az rest --method POST --url ".../connectorGateways/{gw}/listOperations?api-version=2026-05-01-preview" --body '{"connectorName":"{type}"}'
+
+# Dynamic invoke
+az rest --method POST --url ".../connectorGateways/{gw}/connections/{conn}/dynamicInvoke?api-version=2026-05-01-preview" --body '{"request":{"method":"GET","path":"/..."}}'
+
+# Trigger configs
+az rest --method GET --url ".../connectorGateways/{gw}/triggerConfigs?api-version=2026-05-01-preview"
+az rest --method GET --url ".../connectorGateways/{gw}/triggerConfigs/{name}?api-version=2026-05-01-preview" --query "properties.state"
+```
 
 ## References
 

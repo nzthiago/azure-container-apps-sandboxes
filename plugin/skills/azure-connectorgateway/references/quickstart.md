@@ -3,29 +3,22 @@
 ```bash
 # 1. Login
 az login
+az account show --query "{subscription:id, tenant:tenantId}" -o table
 
-# 2. Install SDK
-gh release download --repo Azure-Samples/azure-container-apps-sandboxes --pattern "azure_trigger-*.whl" --dir /tmp
-pip install /tmp/azure_trigger-*.whl
+# 2. List gateways
+az rest --method GET \
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways?api-version=2026-05-01-preview" \
+  --query "value[].{name:name, location:location}" -o table
 
-# 3. List triggers
-python -c "
-from azure.connectorgateway import TriggerClient
-c = TriggerClient(resource_group='my-rg')
-triggers = c.list_triggers('my-gateway')
-print(f'Triggers: {len(triggers)}')
-for t in triggers:
-    print(f'  {t[\"name\"]}: {t[\"properties\"][\"state\"]}')
-"
+# 3. List triggers on a gateway
+az rest --method GET \
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/triggerConfigs?api-version=2026-05-01-preview" \
+  --query "value[].{name:name, state:properties.state, connector:properties.connectorName}" -o table
 
 # 4. Discover operations for a connector
-python -c "
-from azure.connectorgateway import TriggerClient
-c = TriggerClient(resource_group='my-rg')
-ops = c.list_trigger_operations('my-gateway', 'office365')
-for op in ops:
-    print(f'  {op[\"operationId\"]}: {op[\"summary\"]} ({op[\"triggerType\"]})')
-"
+az rest --method POST \
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/listOperations?api-version=2026-05-01-preview" \
+  --body '{"connectorName":"office365"}'
 ```
 
 Or open the lab notebook: `labs/02-trigger-getting-started/01-trigger-getting-started.ipynb`

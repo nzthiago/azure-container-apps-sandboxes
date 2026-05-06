@@ -12,8 +12,8 @@ Content-Type: application/json
 
 ## How to map Swagger operations to runtime URL calls
 
-1. **Find the operation** from the connector's Swagger (use `az rest` to call
-   `listOperations` or `az connectorgateway trigger operations list`)
+1. **Find the operation** from the connector's Swagger (use `az rest --method POST`
+   to call `listOperations` on the gateway)
 
 2. **Build the URL**:
    - Base: `connectionRuntimeUrl` (from connection properties)

@@ -15,11 +15,15 @@ Common issues and their solutions.
 | `dynamicInvoke` 400: `parameters` not valid | Use `{"request": {"method": ..., "path": ...}}` format, NOT `{"parameters": {"operationId": ...}}` |
 | `dynamicInvoke` 400: `Content-*` headers | Do NOT include `Content-Type` or other `Content-*` headers in the request object |
 | `dynamicInvoke` returns `NotFound` for POST | Ensure you pass `queries` and `body` in the request object |
-| `list_operations` AttributeError | Use `az rest --method POST .../{gw}/listOperations --body '{"connectorName": "..."}'` or `az connectorgateway trigger operations list` |
+| `list_operations` AttributeError | Use `az rest --method POST .../{gw}/listOperations --body '{"connectorName": "..."}'` |
 | Runtime URL 403: missing ACL | Create access policy granting caller's principalId access to the connection |
-| Consent redirect shows error | Use `--redirect-url "https://microsoft.com"` — default redirect (`global.consent.azure-apim.net/redirect`) is broken. Consent is auto-confirmed during the `/confirm` step; no code pasting needed |
-| Connection stuck in "Error" | User may not have completed browser auth. Re-generate consent link |
+| Consent redirect shows error | Body MUST use `parameters` array format: `{"parameters":[{"objectId":"...","tenantId":"...","redirectUrl":"https://microsoft.com","parameterName":"token"}]}`. Get objectId/tenantId from connection's `authenticatedUser`. Always use `Start-Process` to open the link |
+| Connection stuck in "Error" | User may not have completed browser auth. Re-generate consent link with `Start-Process`. Do NOT retry with different body formats |
 | `dynamicInvoke` browse fails (mangled JSON) | Use `@file` pattern for `az rest --body` when IDs contain `!`. Always URL-encode IDs |
 | Swagger paths include `/{connectionId}/...` | Strip the prefix — connection context is already set by the endpoint |
 | ShellCommand trigger 403 on callback | Gateway MI needs "Dev Compute SandboxGroup Data Owner" role (`c24cf47c-5077-412d-a19c-45202126392c`) on sandbox group |
-| `trigger create --command` KeyError | CLI bug: `command` is reserved kwarg. Use Python SDK directly as workaround |
+| SDK import `ModuleNotFoundError` | Try `from sandbox import SandboxClient` first, then `from azure.containerapps.sandbox import SandboxClient`. Package name varies by install method |
+| `create_trigger()` SDK rejects with `metadata` | SDK sends a field the API doesn't accept. Use `az rest` with correct body schema (`connectionDetails` + `notificationDetails`) |
+| `exec_command` "no such file" | `exec_command` treats whole string as binary path. Use `aca sandbox exec -c "python /app/handler.py"` (shell-interpreted) instead |
+| `az rest --body` "Unsupported Media Type" | Inline JSON strings get mangled by PowerShell. Always use `@$tmpFile` pattern: write body to temp file, pass `--body "@$tmpFile"` |
+| aca CLI install 404 | GitHub releases URL requires auth. Use `gh release download` (needs `gh auth login`) or ask user for the .tgz path |

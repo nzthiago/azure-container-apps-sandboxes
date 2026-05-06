@@ -5,7 +5,10 @@ Detailed commands for creating event-driven triggers on a connector gateway.
 ## Step 5B: Discover trigger operations
 
 ```bash
-az connectorgateway trigger operations list -g {rg} --gateway {gw} --connector-type office365 -o table
+az rest --method POST \
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/listOperations?api-version=2026-05-01-preview" \
+  --body '{"connectorName":"office365"}'
+# Filter response for trigger operations (type contains "trigger")
 ```
 Present operations as choices (summary + operationId). Let user pick.
 
@@ -37,20 +40,20 @@ parameters = [
 Ask user for existing sandbox or create new:
 ```bash
 # List existing groups (prefer reuse — new groups take 5-20 min to propagate)
-az sandbox group list -g {rg} -o table
+aca sandboxgroup list -g {rg}
 
 # Create new group if needed
-az sandbox group create -g {rg} -n {sg} -l {location} --identity SystemAssigned -o json
+aca sandboxgroup create -g {rg} -n {sg} -l {location}
 
 # Create sandbox (retry with backoff if SandboxGroupNotFound)
-az sandbox create -g {rg} -s {sg} --disk ubuntu -o json
+aca sandbox create -g {rg} --group {sg} --disk ubuntu
 
 # Wait for Running state
-az sandbox show -g {rg} -s {sg} -n {sandbox_id} --query "state" -o tsv
+aca sandbox show -g {rg} --group {sg} --id {sandbox_id} --query "state"
 ```
 
 > **⚠️ Identity (principalId) is on the sandbox GROUP, not individual sandboxes.**
-> If group lacks identity: `az sandbox group update -g {rg} -n {sg} --identity SystemAssigned`
+> Get it: `aca sandboxgroup show -g {rg} -n {sg} --query "identity.principalId"`
 
 Ask for callback type:
 - **ShellCommand** — `python /app/handler.py` (shell-interpreted)
@@ -63,35 +66,45 @@ Ask for callback type:
 
 ### Trigger creation
 
-```powershell
-# ShellCommand target:
-az connectorgateway trigger create -g {rg} --gateway {gw} -n {trigger_name} `
-  --connector-name office365 --connection-name {conn} `
-  --operation-name OnNewEmailV3 `
-  --sandbox-id {sandbox_id} -s {sandbox_group} `
-  --command "python /app/handler.py" `
-  --parameters '[{\"name\": \"folderPath\", \"value\": \"Inbox\"}]' -o json
+> **⚠️ The trigger API uses `connectionDetails` + `notificationDetails`, NOT `connectorName` + `connectionName` at top level.**
+> The SDK's `create_trigger()` sends a `metadata` field that the API rejects. Use `az rest` with the exact body below.
 
-# InvokePort target:
-az connectorgateway trigger create -g {rg} --gateway {gw} -n {trigger_name} `
-  --connector-name office365 --connection-name {conn} `
-  --operation-name OnNewEmailV3 `
-  --sandbox-id {sandbox_id} -s {sandbox_group} `
-  --port 5000 --port-path /webhook `
-  --parameters '[{\"name\": \"folderPath\", \"value\": \"Inbox\"}]' -o json
+```powershell
+# Build trigger config body — ShellCommand example
+$triggerBody = @{
+  properties = @{
+    connectionDetails = @{
+      connectorName = "office365"
+      connectionName = "{conn}"
+    }
+    notificationDetails = @{
+      operationName = "OnNewEmailV3"
+      parameters = @(
+        @{ name = "folderPath"; value = "Inbox" }
+      )
+    }
+    callbackTarget = @{
+      sandboxId = "{sandbox_id}"
+      sandboxGroupName = "{sandbox_group}"
+      command = "python /app/handler.py"
+    }
+  }
+} | ConvertTo-Json -Depth 6 -Compress
+
+# For ExecuteCommand target — replace command with:
+#   "executeCommand" = "python"; "executeArgs" = @("/app/handler.py", "--verbose")
+# For InvokePort target — replace command with:
+#   "port" = 5000; "portPath" = "/webhook"; "httpMethod" = "POST"
+
+$tmpBody = New-TemporaryFile; Set-Content $tmpBody $triggerBody
+az rest --method PUT `
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/triggerConfigs/{trigger_name}?api-version=2026-05-01-preview" `
+  --body "@$tmpBody"
+Remove-Item $tmpBody
 ```
 
-> **⚠️ If `--command` fails with KeyError** (CLI bug), use Python SDK:
-> ```python
-> from azure.connectorgateway import TriggerClient
-> tc = TriggerClient(resource_group='{rg}')
-> tc.create_trigger('{gw}', '{trigger_name}',
->     connector_name='office365', connection_name='{conn}',
->     operation_name='OnNewEmailV3',
->     sandbox_id='{sandbox_id}', sandbox_group='{sandbox_group}',
->     command='python /app/handler.py',
->     parameters=[{'name': 'folderPath', 'value': 'Inbox'}])
-> ```
+> **⚠️ Always use `@$tmpFile` pattern for `az rest --body`** — inline JSON strings
+> cause "Unsupported Media Type" errors due to PowerShell string quoting issues.
 
 ### Access policy (gateway MI → connection)
 
@@ -114,7 +127,7 @@ az rest --method PUT `
 ### Port auth (InvokePort only)
 
 ```bash
-az sandbox port add -g {rg} -s {sandbox_group} -n {sandbox_id} --port 5000 \
+aca sandbox port add -g {rg} --group {sandbox_group} --id {sandbox_id} --port 5000 \
   --entra-id-object-ids {gw_principal_id}
 ```
 
@@ -133,6 +146,8 @@ az role assignment create \
 ## Step 9B: Verify trigger
 
 ```bash
-az connectorgateway trigger show -g {rg} --gateway {gw} -n {trigger} --query "properties.state" -o tsv
+az rest --method GET \
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/triggerConfigs/{trigger}?api-version=2026-05-01-preview" \
+  --query "properties.state" -o tsv
 # Should output: Enabled
 ```

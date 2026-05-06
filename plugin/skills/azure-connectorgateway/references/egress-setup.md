@@ -2,6 +2,10 @@
 
 How to configure a sandbox to call connection runtime URLs directly.
 
+> **⚠️ SDK import path:** Try `from sandbox import SandboxClient` first.
+> If that fails, try `from azure.containerapps.sandbox import SandboxClient`.
+> The package name varies by installation method.
+
 ## Overview
 
 When a sandbox app calls a connection runtime URL, it needs:
@@ -32,7 +36,9 @@ az rest --method PUT `
 ## Step 2: Get the connection runtime URL
 
 ```bash
-az connectorgateway connection show -g {rg} --gateway {gw} -n {conn} --query "properties.connectionRuntimeUrl" -o tsv
+az rest --method GET \
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/{conn}?api-version=2026-05-01-preview" \
+  --query "properties.connectionRuntimeUrl" -o tsv
 ```
 
 ## Step 3: Set egress transform rule
@@ -45,7 +51,7 @@ NO auth header — the platform handles it.
 > If stopped, resume it first:
 > ```python
 > python -c "
-> from azure.sandbox import SandboxClient
+> from azure.containerapps.sandbox import SandboxClient
 > client = SandboxClient(resource_group='{rg}')
 > client.resume_sandbox('{sandbox_id}', '{sandbox_group}')
 > import time; time.sleep(5)
@@ -58,7 +64,7 @@ NO auth header — the platform handles it.
 ```python
 python -c "
 from urllib.parse import urlparse
-from azure.sandbox import SandboxClient
+from azure.containerapps.sandbox import SandboxClient
 client = SandboxClient(resource_group='{rg}')
 runtime_url = '{connectionRuntimeUrl}'
 host = urlparse(runtime_url).hostname
@@ -83,7 +89,7 @@ Or set the full policy (replaces all rules):
 ```python
 python -c "
 from urllib.parse import urlparse
-from azure.sandbox import SandboxClient
+from azure.containerapps.sandbox import SandboxClient
 client = SandboxClient(resource_group='{rg}')
 runtime_url = '{connectionRuntimeUrl}'
 host = urlparse(runtime_url).hostname

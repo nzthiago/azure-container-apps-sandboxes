@@ -98,21 +98,23 @@ def get_mi_token(resource):
 
 ## Deploying handler to sandbox
 
-**Primary method — `write_file()` (recommended):**
-```python
-from azure.sandbox import SandboxClient
-client = SandboxClient(resource_group="{rg}")
-client.write_file("{sandbox_id}", "{sandbox_group}", "/app/handler.py",
-    content=handler_code.encode())
-```
-
-**Alternative — via shell command:**
+**Primary method — `aca sandbox fs write` (recommended):**
 ```bash
-az sandbox execute -g {rg} -s {sandbox_group} --sandbox-id {id} \
-  --command "echo '<base64_content>' | base64 -d > /app/handler.py"
+# Write handler code to a local file first, then upload to sandbox
+# (avoids all shell escaping issues with Python f-strings and curly braces)
+aca sandbox fs write --id {sandbox_id} --path /app/handler.py --file ./handler.py -g {rg} --group {sandbox_group}
 ```
 
-Prefer `write_file()` — simpler, no base64 encoding, no shell escaping issues.
+**Alternative — via exec (for small scripts only):**
+```bash
+aca sandbox exec --id {sandbox_id} -c "cat > /app/handler.py << 'HANDLER_EOF'
+<paste script here>
+HANDLER_EOF" -g {rg} --group {sandbox_group}
+```
+
+> **⚠️ Do NOT try to pass Python code as an inline PowerShell string.**
+> Python f-strings, curly braces, and nested quotes break PowerShell parsing.
+> Always write the handler to a local temp file first, then upload with `aca sandbox fs write`.
 
 ## Handler template (ShellCommand + runtime URL)
 
