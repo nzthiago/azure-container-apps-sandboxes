@@ -2,6 +2,94 @@
 
 How to resolve connector parameters that require dynamic API calls.
 
+## Step 1: Get the connector's Swagger (REQUIRED FIRST)
+
+Before resolving any dynamic value, fetch the connector's **full Swagger definition**.
+This gives you operationId → HTTP method + path mappings for all operations.
+
+```powershell
+# Fetch the full Swagger — MUST save to file first (ConvertFrom-Json fails on piped output)
+az rest --method GET `
+  --url "https://management.azure.com/subscriptions/{sub}/providers/Microsoft.Web/locations/{location}/managedApis/{connector}" `
+  --url-parameters "api-version=2016-06-01" "export=true" -o json > $env:TEMP\swagger.json
+
+# Parse the swagger and extract operationId → path table
+python -c "
+import json
+with open(r'$env:TEMP\swagger.json') as f:
+    data = json.load(f)
+paths = data.get('properties',{}).get('apiDefinitions',{}).get('value',{}).get('paths',{})
+for path, methods in paths.items():
+    for method, details in methods.items():
+        if isinstance(details, dict) and 'operationId' in details:
+            clean_path = path.replace('/{connectionId}', '')
+            print(f'{details[\"operationId\"]:40s} {method.upper():6s} {clean_path}')
+"
+```
+
+> **⚠️ PowerShell parsing issue:** `az rest` with `export=true` returns raw swagger that
+> breaks `ConvertFrom-Json` when piped. Always save to file with `-o json > file.json` first.
+
+**To find the path for an operationId** (e.g., `GetFolders`):
+- Look through `paths` → each path key (e.g., `/{connectionId}/datasets/default/folders`) has method entries (get, post, etc.)
+- Each method entry has an `operationId` field
+- When you find the matching `operationId`, the path key (minus `/{connectionId}`) is what you pass to `dynamicInvoke`
+
+> **Strip `/{connectionId}` from the path.** The Swagger paths start with `/{connectionId}/...`
+> but when calling `dynamicInvoke`, use only the part after `/{connectionId}`.
+> Example: Swagger path `/{connectionId}/datasets/default/folders` → dynamicInvoke path `/datasets/default/folders`
+
+**⚠️ Literal path segments gotcha:** Some paths look like variables but are literal strings.
+Example: `/notebooks/notebookKey/sections` — `notebookKey` is a **literal** path segment, NOT a
+variable to substitute. The actual notebook key goes as a **query parameter** named `notebookKey`.
+Always check the Swagger parameter definitions (`in: query` vs `in: path`) to know which is which.
+
+### Common connector paths (quick reference)
+
+| Connector | operationId | Path | Key params |
+|-----------|-------------|------|------------|
+| office365 | SendMailV2 | `/v2/Mail` | body: To, Subject, Body |
+| office365 | GetEmails | `/datasets/default/messages` | folderPath (query) |
+| office365 | OnNewEmailV3 | `/trigger1/datasets/default/messages` | folderPath (query) |
+| onedriveforbusiness | ListFolder | `/datasets/default/folders/{id}/listchildren` | id (path) |
+| onedriveforbusiness | CreateFile | `/datasets/default/files` | folderPath (query), name (query) |
+| sharepointonline | GetItems | `/datasets/{dataset}/tables/{table}/items` | dataset, table (path) |
+| sharepointonline | PostItem | `/datasets/{dataset}/tables/{table}/items` | dataset, table (path) |
+| teams | GetAllTeams | `/beta/me/joinedTeams` | — |
+| teams | GetChannels | `/beta/groups/{groupId}/channels` | groupId (path) |
+| onenote | GetNotebooks | `/notebooks` | — |
+| onenote | GetSectionsInNotebook | `/notebooks/notebookKey/sections` | notebookKey (query, NOT path) |
+| onenote | OnNewPageInSection | `/trigger3/sections/Dynamic/pages` | notebookKey, sectionId (query) |
+
+## Step 2: Understand value vs display name
+
+When resolving dynamic values, every item in the response has TWO fields:
+- **value** (from `value-path`) — the ID/key to pass to APIs. Example: `"b!oBRIcPVy5ke..."`
+- **display name** (from `value-title`) — what to show the user. Example: `"Documents"`
+
+**CRITICAL rules:**
+1. Show the **display name** to the user for selection
+2. Store the **value** internally
+3. When a subsequent parameter depends on this one, pass the **value** (NEVER the display name)
+
+Example dependency chain:
+```
+Parameter 1: "notebookKey" (x-ms-dynamic-values → operationId: "GetNotebooks")
+  → API returns: [{Name: "Work Notebook", Key: "Aprana @ Microsoft|$|https://..."}]
+  → Show user: ["Work Notebook", "Personal Notes"]
+  → User picks "Work Notebook" → STORE value = "Aprana @ Microsoft|$|https://..."
+
+Parameter 2: "sectionId" (x-ms-dynamic-values → operationId: "GetSectionsInNotebook", parameters: {"notebookKey": {"parameter": "notebookKey"}})
+  → Call GetSectionsInNotebook with notebookKey = STORED VALUE (the long key, NOT "Work Notebook")
+  → API returns: [{Name: "Meeting Notes", Id: "section-id-123"}]
+  → Show user: ["Meeting Notes", "Ideas"]
+  → User picks "Meeting Notes" → STORE value = "section-id-123"
+```
+
+> **⚠️ The most common agent mistake:** Using the display name ("Work Notebook") instead of the
+> stored value ("Aprana @ Microsoft|$|https://...") when calling the next operation.
+> This causes 404s or empty results because the API expects the ID/key, not the human-readable name.
+
 ## `x-ms-dynamic-values` — Flat list of options
 
 The Swagger extension specifies an `operationId` to call and how to extract items:
@@ -16,9 +104,16 @@ The Swagger extension specifies an `operationId` to call and how to extract item
 ```
 
 **How to handle:**
-1. Resolve `operationId` → find the operation's HTTP method + path in the Swagger
-2. Resolve `parameters` — substitute values from previously collected params:
-   - `{"parameter": "dataset"}` → use the value the user already selected for `dataset`
+1. Resolve `operationId` → find the matching path in the Swagger (fetched in Step 1):
+   - Search through `paths` for an entry whose method has `operationId` matching the one in the extension
+   - Extract the path key and strip `/{connectionId}` prefix
+   - Extract the HTTP method (get, post, etc.)
+   ```
+   Example: operationId "GetFolders" found at path "/{connectionId}/datasets/default/folders" with method "get"
+   → dynamicInvoke path = "/datasets/default/folders", method = "GET"
+   ```
+2. Resolve `parameters` — substitute **values** (NOT display names) from previously collected params:
+   - `{"parameter": "dataset"}` → use the **stored value** the user selected for `dataset` (the `value-path` field, NOT the display name)
    - `{"value": "default"}` → use literal `"default"`
    - Plain string → use as-is
 3. Call `dynamicInvoke`:
@@ -40,9 +135,15 @@ The Swagger extension specifies an `operationId` to call and how to extract item
 
 4. Unwrap response: extract `response.body`
 5. If `value-collection` is set (e.g., `"value"`), navigate to that array: `response.body.value`
-6. For each item: extract `value-path` (e.g., `Id`) as the value, `value-title` (e.g., `DisplayName`) as the label
-7. Present ALL items as choices via `ask_user`
+6. For each item: extract TWO things:
+   - `value-path` field (e.g., `Id`) → **this is the VALUE to store and pass to subsequent API calls**
+   - `value-title` field (e.g., `DisplayName`) → **this is what you show the user**
+7. Present `value-title` items as choices via `ask_user`
 8. **STOP and wait for user selection**
+9. **Store the selected item's `value-path` field** — you will need it if any subsequent parameter depends on this one
+
+> **⚠️ NEVER use the display name in API calls.** If the next parameter depends on this one
+> (via `{"parameter": "thisParam"}`), pass the stored VALUE, not what the user saw.
 
 **Common examples:**
 | Connector | Parameter | Path | value-path | value-title |
@@ -62,7 +163,11 @@ Identical to `x-ms-dynamic-values` except:
 
 ## `x-ms-dynamic-tree` — Hierarchical browsing (folder tree)
 
-The Swagger extension defines `open` (root) and `browse` (children) operations:
+Used for folder pickers where the user navigates level-by-level. The extension defines:
+- `open` — fetches root-level items
+- `browse` — fetches children of a selected item
+- `settings` — controls what can be selected
+
 ```json
 "x-ms-dynamic-tree": {
   "open": {
@@ -84,81 +189,103 @@ The Swagger extension defines `open` (root) and `browse` (children) operations:
 }
 ```
 
-### Step-by-step algorithm:
+### Algorithm
 
-**Step T1: Resolve the `open` operationId to an HTTP path.**
-Find the operation in the Swagger (from `listOperations`) whose `operationId`
-matches `open.operationId`. Extract its `method` and `path`.
-
-**Step T2: Call the `open` operation to get root items.**
-```powershell
-# For static paths (no dynamic IDs), use escaped quotes:
-az rest --method POST `
-  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/{conn}/dynamicInvoke?api-version=2026-05-01-preview" `
-  --body '{\"request\":{\"method\":\"GET\",\"path\":\"/datasets/default/folders\"}}' `
-  --headers "Content-Type=application/json" `
-  --query "response.body[].{Name:DisplayName, Id:Id, IsFolder:IsFolder}" -o table
+**Step T1: Get the `open` operation path from the Swagger.**
+```
+open.operationId = "ListRootFolders"
+→ Find in Swagger paths → "/{connectionId}/datasets/default/folders" (GET)
+→ dynamicInvoke path = "/datasets/default/folders"
 ```
 
-**Step T3: Present root items as choices. STOP and wait.**
-Show all items to the user. Mark folders with 📁 prefix. Include a
-"✅ Select this level (root)" option if `canSelectParentNodes` is true.
+**Step T2: Call `open` via dynamicInvoke.**
+```powershell
+$body = @{request=@{method="GET";path="/datasets/default/folders"}} | ConvertTo-Json -Compress
+$tmp = New-TemporaryFile; Set-Content $tmp $body
+az rest --method POST `
+  --url ".../{gw}/connections/{conn}/dynamicInvoke?api-version=2026-05-01-preview" `
+  --body "@$tmp" -o json > $env:TEMP\tree-response.json
+Remove-Item $tmp
+```
+
+**Step T3: Parse the response and present items.**
+- Navigate to `response.body` → then follow `itemsPath` (e.g., `"value"` → `response.body.value`)
+- For each item, extract:
+  - `itemTitlePath` field (e.g., `DisplayName`) → show to user
+  - `itemValuePath` field (e.g., `Id`) → store internally
+  - Check `itemIsParent` condition → mark with 📁 if true (can browse deeper)
+
+Present to user:
 ```
 📁 Apps
 📁 Documents
 📁 Desktop
 📁 EmailAttachments
-✅ Select root (/)
+✅ Select root (/)      ← only show if canSelectParentNodes is true
 ```
 **STOP and wait for user selection.**
 
-**Step T4: If user selects a folder and wants to go deeper — BROWSE.**
-Resolve the `browse` operationId to an HTTP path. The `browse.parameters`
-tell you how to substitute the selected item's value into the path:
-- `"id": { "selectedItemValuePath": "Id" }` means: take the `Id` field from
-  the selected item and substitute it for the `{id}` path parameter.
-- **URL-encode the ID** — OneDrive IDs contain `!` and other special characters.
+**Step T4: User selects a folder → BROWSE deeper.**
 
-```powershell
-$selectedId = "b!oBRIc...01EBKFNYMT34SLMMPFYFEKV2L46DV54RIE"
-$encodedId = [System.Uri]::EscapeDataString($selectedId)
+1. Get the `browse` operation path from the Swagger:
+   ```
+   browse.operationId = "ListChildFolders"
+   → Found in Swagger → "/{connectionId}/datasets/default/folders/{id}" (GET)
+   → dynamicInvoke path template = "/datasets/default/folders/{id}"
+   ```
 
-$bodyJson = '{"request":{"method":"GET","path":"/datasets/default/folders/' + $encodedId + '"}}'
-$tmpBody = [System.IO.Path]::GetTempFileName()
-$bodyJson | Out-File -FilePath $tmpBody -Encoding ascii -NoNewline
+2. Substitute the selected item's value into the path using `browse.parameters`:
+   ```
+   browse.parameters = { "id": { "selectedItemValuePath": "Id" } }
+   
+   This means: take the "Id" field from the item the user selected,
+   and substitute it for {id} in the path.
+   ```
 
-az rest --method POST `
-  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/{conn}/dynamicInvoke?api-version=2026-05-01-preview" `
-  --body "@$tmpBody" `
-  --headers "Content-Type=application/json" `
-  --query "response.body[].{Name:DisplayName, Id:Id, Path:Path, IsFolder:IsFolder}" -o table
+3. **URL-encode the value** — IDs often contain `!`, `/`, spaces, and other special chars:
+   ```powershell
+   $selectedId = "b!oBRIcPVy5ke..."  # The stored VALUE from user's selection
+   $encodedId = [System.Uri]::EscapeDataString($selectedId)
+   $browsePath = "/datasets/default/folders/$encodedId"
+   ```
 
-Remove-Item $tmpBody -ErrorAction SilentlyContinue
+4. Call dynamicInvoke with the constructed browse path:
+   ```powershell
+   $body = @{request=@{method="GET";path=$browsePath}} | ConvertTo-Json -Compress
+   $tmp = New-TemporaryFile; Set-Content $tmp $body
+   az rest --method POST `
+     --url ".../{gw}/connections/{conn}/dynamicInvoke?api-version=2026-05-01-preview" `
+     --body "@$tmp" -o json > $env:TEMP\tree-response.json
+   Remove-Item $tmp
+   ```
+
+5. Parse response same as Step T3 — present child items to user.
+
+**Step T5: Present children. STOP and wait.**
+```
+📁 Project Files
+📁 Templates
+📄 README.md
+✅ Select "Documents"    ← show if canSelectParentNodes is true
 ```
 
-> **⚠️ MUST use `@file` pattern for browse calls.** Folder/item IDs often
-> contain `!`, `.`, and long base64 strings that break PowerShell inline quoting.
+**Step T6: Repeat T4-T5** until user selects (clicks ✅) or picks a leaf item.
 
-**Step T5: Present children + selection option. STOP and wait.**
+### Final value to use
 
-**Step T6: Repeat T4-T5** until the user selects a folder or leaf item.
-Use the final item's `Path` or `Id` as the parameter value.
+When the user makes their final selection:
+- Use the `itemValuePath` field (e.g., `Id` or `Path`) as the parameter value
+- Some connectors expect `Path` (e.g., `/Documents/Copilot`), others expect `Id`
+- Check the Swagger parameter definition for the original parameter to see what type it expects
 
-**Summary of the tree walk pattern:**
-```
-open (root) → present choices → STOP
-  └─ user picks "Documents" → browse(Documents.Id) → present choices → STOP
-       └─ user picks "Copilot" → browse(Copilot.Id) → present choices → STOP
-            └─ user picks "✅ Select this folder" → use "/Documents/Copilot"
-```
+### Key rules for dynamic tree
 
-**Key rules for dynamic tree:**
-- **Always resolve `operationId` to path** from the Swagger — do NOT guess paths
-- **Always URL-encode IDs** with `[System.Uri]::EscapeDataString()`
-- **Always use `@file` pattern** for browse calls (IDs have special chars)
-- **Always STOP at each level** — let the user choose to go deeper or select
-- If `browse` is not defined, reuse `open` with the selected item's ID as parameter
-- The final value to use is typically the `Path` field or the `Id` field
+- **Always use `@file` pattern** for browse calls (IDs have special chars that break inline JSON)
+- **Always URL-encode** values with `[System.Uri]::EscapeDataString()`
+- **Always STOP at each level** — let the user choose to go deeper or select current
+- **Use VALUE not display name** when constructing browse paths
+- If `browse` is not defined in the extension, reuse `open` with the selected item's value as a parameter
+- Check `itemIsParent` to know which items can be browsed deeper (📁) vs are leaf items (📄)
 
 ## `x-ms-dynamic-schema` — Schema depends on prior selection
 

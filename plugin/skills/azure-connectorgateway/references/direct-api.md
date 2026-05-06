@@ -5,15 +5,41 @@ Gateway injects stored OAuth credentials. **Use `request` format (NOT `parameter
 
 > **⚠️ Do NOT include `Content-*` headers in the request object.**
 
-## 1. Select the operation
+## 1. Get the Swagger and select the operation
 
-```bash
-az rest --method POST \
-  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/listOperations?api-version=2026-05-01-preview" \
-  --body '{"connectorName":"{connector}"}'
+```powershell
+# Get connector Swagger — save to file (ConvertFrom-Json fails on piped output)
+az rest --method GET `
+  --url "https://management.azure.com/subscriptions/{sub}/providers/Microsoft.Web/locations/{location}/managedApis/{connector}" `
+  --url-parameters "api-version=2016-06-01" "export=true" -o json > $env:TEMP\swagger.json
+
+# Extract operationId → path table
+python -c "
+import json
+with open(r'$env:TEMP\swagger.json') as f:
+    data = json.load(f)
+paths = data.get('properties',{}).get('apiDefinitions',{}).get('value',{}).get('paths',{})
+for path, methods in paths.items():
+    for method, details in methods.items():
+        if isinstance(details, dict) and 'operationId' in details:
+            clean_path = path.replace('/{connectionId}', '')
+            print(f'{details[\"operationId\"]:40s} {method.upper():6s} {clean_path}')
+"
 ```
+
+To list available operations (for presenting choices or matching user intent):
+```powershell
+# Quick list of operations with summaries (lighter than full swagger)
+az rest --method GET `
+  --url "https://management.azure.com/subscriptions/{sub}/providers/Microsoft.Web/locations/{location}/managedApis/{connector}/apiOperations?api-version=2016-06-01" `
+  --query "value[].{name:name, summary:properties.summary, trigger:properties.trigger}" -o table
+```
+
 Match user's intent to the best operation. If ambiguous, ask with specific choices.
 Do NOT dump all operations for the user — choose the right one yourself.
+
+**To find the HTTP path for a chosen operationId:** Search the Swagger `paths` for the matching
+`operationId`. Strip the `/{connectionId}` prefix — that's the path you pass to `dynamicInvoke`.
 
 ## 2. Collect parameter values interactively
 
@@ -46,7 +72,8 @@ For each required parameter, check its Swagger extension. Use `@$tmpFile` for `a
 **Key rules:**
 - **STOP at every dynamic parameter** — even if you think you know the answer.
   The user's Teams, channels, SharePoint sites, and folders are NOT predictable.
-- **Always resolve `operationId` to HTTP path** from the Swagger — do NOT guess
+- **Always resolve `operationId` to HTTP path** — search the Swagger `paths` (from Step 1) for the matching
+  `operationId`. Strip `/{connectionId}` prefix. That's the path for `dynamicInvoke`.
 - **Always URL-encode IDs** with `[System.Uri]::EscapeDataString()`
 - **Use `@file` pattern** for `az rest --body` when IDs contain `!` or special chars
 - **Skip optional parameters** unless user mentioned them

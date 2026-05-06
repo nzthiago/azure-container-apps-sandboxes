@@ -13,8 +13,8 @@ Prerequisites:
   - Sandbox group + sandbox already created
 
 Usage:
-    python trigger-getting-started.py -g <resource-group> --gateway <gw-name>
-    python trigger-getting-started.py -g <resource-group> --gateway <gw-name> --connector office365
+    python trigger-getting-started.py -g <resource-group> --gateway <gw-name> --sandbox-id <id> --sandbox-group <sg>
+    python trigger-getting-started.py -g <resource-group> --gateway <gw-name> --sandbox-id <id> --sandbox-group <sg> --connector office365
 """
 
 import argparse
@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import os
+import uuid
 
 parser = argparse.ArgumentParser(description="Trigger Getting Started")
 parser.add_argument("-g", "--resource-group", required=True, help="Resource group")
@@ -58,7 +59,7 @@ print(f"Connection:       {connection_name}")
 
 
 def az_rest(method, url, body=None):
-    """Call az rest and return parsed JSON."""
+    """Call az rest and return parsed JSON. Exits with helpful message on failure."""
     cmd = ["az", "rest", "--method", method, "--url", url]
     if body:
         # Use temp file to avoid PowerShell/shell quoting issues
@@ -69,6 +70,10 @@ def az_rest(method, url, body=None):
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         return json.loads(result.stdout) if result.stdout.strip() else {}
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr[:300] if e.stderr else "unknown error"
+        print(f"  ❌ az rest {method} failed: {error_msg}")
+        raise
     finally:
         if body:
             os.unlink(tmp.name)
@@ -81,24 +86,107 @@ print("\n" + "=" * 60)
 print(f"Step 1: Discover Trigger Operations for {connector}")
 print("=" * 60)
 
-operations = az_rest("POST", f"{ARM_BASE}/listOperations?{API_VERSION}",
-                     body={"connectorName": connector})
+# Use the classic locations API to discover operations
+# First get gateway location
+gw_info = az_rest("GET", f"{ARM_BASE}?{API_VERSION}")
+location = gw_info.get("location", "westcentralus")
 
-trigger_ops = [op for op in operations.get("value", operations) if "trigger" in op.get("operationId", "").lower() or op.get("triggerType")]
+ops_url = f"https://management.azure.com/subscriptions/{subscription_id}/providers/Microsoft.Web/locations/{location}/managedApis/{connector}/apiOperations?api-version=2016-06-01"
+operations = az_rest("GET", ops_url)
+
+raw_ops = operations.get("value", []) if isinstance(operations, dict) else operations
+trigger_ops = [op for op in raw_ops if op.get("properties", {}).get("trigger")]
+
+if not trigger_ops:
+    print("  ❌ No trigger operations found for this connector.")
+    print(f"     Verify connector name '{connector}' is correct and available in location '{location}'.")
+    sys.exit(1)
+
 print(f"  {len(trigger_ops)} trigger operations available:")
-for op in trigger_ops:
-    print(f"    {op['operationId']}: {op.get('summary', '')} ({op.get('triggerType', '?')})")
+for i, op in enumerate(trigger_ops, 1):
+    props = op.get("properties", {})
+    trigger_type = props.get("trigger", "")
+    print(f"    {i}. {op['name']}: {props.get('summary', '')} [{trigger_type}]")
 
-selected_op = trigger_ops[0] if trigger_ops else {"operationId": "OnNewEmail"}
-print(f"\n  Selected: {selected_op['operationId']}")
+# Auto-select first trigger for demo purposes (interactive scripts should prompt user)
+selected_op = trigger_ops[0]
+selected_name = selected_op.get("name", selected_op.get("operationId"))
+trigger_type = selected_op.get("properties", {}).get("trigger", "")
+print(f"\n  Selected: {selected_name}")
+
+# Recurrence-based (batch/polling) triggers fire every ~3 minutes by default.
+# Inform the user so they can adjust if needed.
+if trigger_type in ("batch", "Batch"):
+    print(f"\n  ⚠️  This is a polling trigger — it checks for new items every ~3 minutes by default.")
+    print(f"      The recurrence interval can be configured via the 'recurrence' parameter if supported.")
 
 # =========================================================================
-# Step 2: Create Trigger Config
+# Step 2: Create Access Policy + RBAC (required before trigger creation)
 # =========================================================================
 print("\n" + "=" * 60)
-print("Step 2: Create Trigger Config")
+print("Step 2: Create Access Policy + RBAC")
+print("=" * 60)
+
+# Get gateway identity
+gw_principal_id = gw_info.get("identity", {}).get("principalId")
+gw_tenant_id = gw_info.get("identity", {}).get("tenantId")
+if not gw_principal_id:
+    print("  ❌ Gateway has no managed identity. Cannot create trigger.")
+    print("     Recreate gateway with SystemAssigned identity.")
+    sys.exit(1)
+
+# Create access policy (gateway MI → connection)
+acl_body = {
+    "location": location,
+    "properties": {
+        "principal": {
+            "type": "ActiveDirectory",
+            "identity": {"objectId": gw_principal_id, "tenantId": gw_tenant_id},
+        }
+    },
+}
+az_rest("PUT", f"{ARM_BASE}/connections/{connection_name}/accessPolicies/gateway-acl?{API_VERSION}", body=acl_body)
+print(f"  ✓ Access policy: gateway MI → {connection_name}")
+
+# Assign RBAC role (Dev Compute SandboxGroup Data Owner) on sandbox group
+ROLE_ID = "c24cf47c-5077-412d-a19c-45202126392c"
+sg_scope = f"/subscriptions/{subscription_id}/resourceGroups/{rg}/providers/Microsoft.App/sandboxGroups/{sandbox_group}"
+role_body = {
+    "properties": {
+        "roleDefinitionId": f"/subscriptions/{subscription_id}/providers/Microsoft.Authorization/roleDefinitions/{ROLE_ID}",
+        "principalId": gw_principal_id,
+        "principalType": "ServicePrincipal",
+    }
+}
+assignment_name = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{gw_principal_id}-{sandbox_group}-{ROLE_ID}"))
+role_url = f"https://management.azure.com{sg_scope}/providers/Microsoft.Authorization/roleAssignments/{assignment_name}?api-version=2022-04-01"
+try:
+    az_rest("PUT", role_url, body=role_body)
+    print(f"  ✓ RBAC role assigned: gateway MI → sandbox group")
+except subprocess.CalledProcessError as e:
+    if "RoleAssignmentExists" in (e.stderr or ""):
+        print(f"  ✓ RBAC role already exists")
+    else:
+        print(f"  ⚠️  RBAC assignment failed (trigger may 403): {e.stderr[:200] if e.stderr else 'unknown error'}")
+
+# =========================================================================
+# Step 3: Create Trigger Config
+# =========================================================================
+print("\n" + "=" * 60)
+print("Step 3: Create Trigger Config")
 print("=" * 60)
 config_name = f"{connector}-trigger"
+
+# Build connector-aware default parameters
+DEFAULT_PARAMS = {
+    "office365": [{"name": "folderPath", "value": "Inbox"}],
+    "sharepointonline": [],  # requires dynamic values (siteUrl, listName)
+    "onedriveforbusiness": [],  # requires dynamic values (folderPath)
+    "teams": [],  # requires dynamic values (teamId, channelId)
+}
+parameters = DEFAULT_PARAMS.get(connector, [])
+if not parameters:
+    print(f"  ℹ️  No default parameters for '{connector}'. Trigger will use operation defaults.")
 
 trigger_body = {
     "properties": {
@@ -106,15 +194,24 @@ trigger_body = {
             "connectorName": connector,
             "connectionName": connection_name,
         },
-        "notificationDetails": {
-            "operationName": selected_op["operationId"],
-            "parameters": [{"name": "folderPath", "value": "Inbox"}],
-        },
-        "callbackTarget": {
-            "sandboxId": sandbox_id,
+        "metadata": {
             "sandboxGroupName": sandbox_group,
-            "command": f"echo 'Trigger {config_name} fired!' >> /tmp/trigger.log",
+            "sandboxId": sandbox_id,
         },
+        "notificationDetails": {
+            "authentication": {
+                "audience": "https://management.azuredevcompute.io/",
+                "type": "ManagedServiceIdentity",
+            },
+            "body": {
+                "activationMode": "OnDemand",
+                "command": f"echo 'Trigger {config_name} fired!' >> /tmp/trigger.log",
+            },
+            "callbackUrl": f"https://management.azuredevcompute.io/subscriptions/{subscription_id}/resourceGroups/{rg}/sandboxGroups/{sandbox_group}/sandboxes/{sandbox_id}/executeShellCommand?api-version=2026-02-01-preview",
+            "httpMethod": "Post",
+        },
+        "operationName": selected_name,
+        "parameters": parameters,
     }
 }
 
@@ -123,10 +220,10 @@ state = trigger.get("properties", {}).get("state", "Unknown")
 print(f"  ✓ Trigger config: {config_name} ({state})")
 
 # =========================================================================
-# Step 3: List and Inspect Trigger Configs
+# Step 4: List and Inspect Trigger Configs
 # =========================================================================
 print("\n" + "=" * 60)
-print("Step 3: List Trigger Configs")
+print("Step 4: List Trigger Configs")
 print("=" * 60)
 
 triggers = az_rest("GET", f"{ARM_BASE}/triggerConfigs?{API_VERSION}")
@@ -136,10 +233,10 @@ for t in triggers.get("value", []):
     print(f"    {name}: {s}")
 
 # =========================================================================
-# Step 4: Enable / Disable
+# Step 5: Enable / Disable
 # =========================================================================
 print("\n" + "=" * 60)
-print("Step 4: Enable / Disable Trigger Config")
+print("Step 5: Enable / Disable Trigger Config")
 print("=" * 60)
 
 az_rest("POST", f"{ARM_BASE}/triggerConfigs/{config_name}/disable?{API_VERSION}")
@@ -149,11 +246,11 @@ az_rest("POST", f"{ARM_BASE}/triggerConfigs/{config_name}/enable?{API_VERSION}")
 print(f"  Enabled: {config_name}")
 
 # =========================================================================
-# Step 5: Cleanup
+# Step 6: Cleanup
 # =========================================================================
 if args.cleanup:
     print("\n" + "=" * 60)
-    print("Step 5: Cleanup")
+    print("Step 6: Cleanup")
     print("=" * 60)
     az_rest("DELETE", f"{ARM_BASE}/triggerConfigs/{config_name}?{API_VERSION}")
     print(f"  ✓ Deleted trigger config: {config_name}")

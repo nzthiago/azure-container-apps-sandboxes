@@ -176,5 +176,5 @@ if __name__ == "__main__":
 - Add retry logic (2-3 attempts, 2s delay)
 - Egress handles auth — do NOT add Authorization headers
 - Use `requests` not `httpx`
-- Deploy via `write_file()` (preferred) or base64 pipe
+- Deploy via `aca sandbox fs write` (preferred) or base64 pipe
 - For email attachments: use `includeAttachments=true` on `/v2/Mail`, NOT separate endpoints

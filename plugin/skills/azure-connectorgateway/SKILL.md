@@ -26,13 +26,13 @@ to sandbox apps via direct API calls or event-driven triggers.
 | Rule | Details |
 |------|---------|
 | **No hallucination** | Check `references/` for details. Use `az rest --help` for syntax. |
-| **No notebooks/scripts** | Walk user through interactively. Execute `az rest` commands directly. |
+| **No generated notebooks/scripts** | Do NOT generate a notebook or standalone script for the user. Walk through interactively. (Reference scripts in `scripts/` and `labs/` exist for learning.) |
 | **No MCP configs** | Sandbox apps call runtime URL directly via HTTP. If you reach `mcp-config create`, STOP. |
 | **No guessing dynamic values** | `x-ms-dynamic-*` → call API, present results, STOP. Never assume a team/channel/folder/site. |
 | **Execute, don't ask** | Gather inputs → execute immediately → report. Never say "Can I run this?" |
 | **No az extensions** | Gateway = `az rest`. Sandbox = `aca` CLI. Do NOT use `az connectorgateway/sandbox/sandboxgroup`. |
-| **Always `@$tmpFile`** | For `az rest --body` — inline JSON breaks in PowerShell. See [gotchas.md](references/gotchas.md). |
-| **Trigger body schema** | Uses `connectionDetails` + `notificationDetails`. SDK `create_trigger()` is broken. See Step 5B template. |
+| **Always `@$tmpFile`** | For `az rest --body` in PowerShell — inline JSON breaks. Bash examples in references/ use inline for brevity (shell quoting works in bash). See [gotchas.md](references/gotchas.md). |
+| **Trigger body schema** | Uses `metadata` + `notificationDetails` (callbackUrl/body/auth). `operationName`+`parameters` at properties root. `callbackTarget` does NOT exist. See Step 5B template. |
 | **Handler deploy** | Write to local file → `aca sandbox fs write`. Never inline Python in PowerShell. |
 | **SSL/stderr** | `REQUESTS_CA_BUNDLE` preferred. `verify=False` needs `disable_warnings()`. stderr = trigger failure. See [handler-guide.md](references/handler-guide.md). |
 | **Parallel execution** | Run independent ops (connections, ACLs, egress, dynamic values) as parallel tool calls. |
@@ -84,11 +84,14 @@ Ask the user:
   ```
 - If **new**: ask for resource group + gateway name + location, then **create it
   immediately** with a SystemAssigned managed identity (required for trigger callbacks):
-  ```bash
-  az rest --method PUT \
-    --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}?api-version=2026-05-01-preview" \
-    --body '{"location":"{location}","identity":{"type":"SystemAssigned"}}' \
+  ```powershell
+  $gwBody = @{ location = "{location}"; identity = @{ type = "SystemAssigned" } } | ConvertTo-Json -Compress
+  $tmp = New-TemporaryFile; Set-Content $tmp $gwBody
+  az rest --method PUT `
+    --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}?api-version=2026-05-01-preview" `
+    --body "@$tmp" `
     --query "{name:name, principalId:identity.principalId, tenantId:identity.tenantId}"
+  Remove-Item $tmp
   ```
 - **Always** capture `principalId` and `tenantId` — they are needed later for
   access policies and InvokePort auth.
@@ -105,15 +108,16 @@ Ask the user:
 
 Create ALL needed connections in parallel, then consent all at once:
 
-```bash
+```powershell
 # Create connections (parallel tool calls if multiple):
-az rest --method PUT \
-  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/o365-conn?api-version=2026-05-01-preview" \
-  --body '{"properties":{"api":{"name":"office365"}},"location":"{location}"}'
+$connBody = @{ properties = @{ api = @{ name = "office365" } }; location = "{location}" } | ConvertTo-Json -Compress
+$tmp = New-TemporaryFile; Set-Content $tmp $connBody
+az rest --method PUT `
+  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/o365-conn?api-version=2026-05-01-preview" `
+  --body "@$tmp"
+Remove-Item $tmp
 
-az rest --method PUT \
-  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/onedrive-conn?api-version=2026-05-01-preview" \
-  --body '{"properties":{"api":{"name":"onedriveforbusiness"}},"location":"{location}"}'
+# Repeat for additional connections (onedriveforbusiness, sharepointonline, etc.)
 ```
 
 Generate consent links and open in browser. → **Exact format:** See [consent.md](references/consent.md)
@@ -145,29 +149,13 @@ Ask the user:
 
 ### Step 5A: Direct API calls via dynamicInvoke
 
-→ **Full details:** See [direct-api.md](references/direct-api.md)
+→ **Full details:** [direct-api.md](references/direct-api.md) | **Dynamic values:** [dynamic-values.md](references/dynamic-values.md)
 
-**Summary:** Call `dynamicInvoke` endpoint with `{"request": {"method":"...", "path":"...", "queries":{}, "body":...}}`.
-Do NOT include `Content-*` headers. Gateway injects stored OAuth credentials.
+1. Get the connector Swagger (`managedApis/{connector}?export=true`) → extract operationId-to-path table
+2. Call `dynamicInvoke` on the connection with the resolved `method` + `path`
+3. If parameters have `x-ms-dynamic-*` → resolve via dynamicInvoke, show display names to user, store values
 
-```bash
-# List operations for a connector
-az rest --method POST \
-  --url ".../{gw}/listOperations?api-version=2026-05-01-preview" \
-  --body '{"connectorName":"{connector}"}'
-
-# Call an operation
-az rest --method POST \
-  --url ".../{gw}/connections/{conn}/dynamicInvoke?api-version=2026-05-01-preview" \
-  --body '{"request":{"method":"POST","path":"/v2/Mail","body":{...}}}'
-```
-
-> **🚫 Dynamic values:** If a parameter has `x-ms-dynamic-*`, STOP — call the API,
-> present results, wait for user selection. NEVER guess folder/site/channel IDs.
-
-**If deploying to sandbox:** Set up ACL + egress. See [egress-setup.md](references/egress-setup.md).
-- Token resource: `https://management.core.windows.net/`
-- Header format: `"Bearer {value}"`
+**If deploying to sandbox:** Set up ACL + egress → [egress-setup.md](references/egress-setup.md)
 
 **→ Skip to Final verification checklist.**
 
@@ -175,48 +163,24 @@ az rest --method POST \
 
 ### Step 5B: Event-driven triggers
 
-→ **Full trigger setup commands (Steps 5B–9B):** See [trigger-setup.md](references/trigger-setup.md)
+→ **Full trigger setup (Steps 5B–9B):** [trigger-setup.md](references/trigger-setup.md) | **Dynamic values:** [dynamic-values.md](references/dynamic-values.md)
 
-**Trigger body template (copy-paste ready):**
-```powershell
-$triggerBody = @{
-  properties = @{
-    connectionDetails = @{ connectorName = "{connector}"; connectionName = "{conn}" }
-    notificationDetails = @{
-      operationName = "{operation}"
-      parameters = @( @{ name = "{param}"; value = "{value}" } )
-    }
-    callbackTarget = @{
-      sandboxId = "{sandbox_id}"; sandboxGroupName = "{sg}"
-      command = "python /app/handler.py"  # ShellCommand
-      # OR: port = 5000; portPath = "/webhook"; httpMethod = "POST"  # InvokePort
-    }
-  }
-} | ConvertTo-Json -Depth 6 -Compress
-$tmp = New-TemporaryFile; Set-Content $tmp $triggerBody
-az rest --method PUT `
-  --url ".../{gw}/triggerConfigs/{name}?api-version=2026-05-01-preview" `
-  --body "@$tmp"
-Remove-Item $tmp
-```
-> **⚠️ Do NOT use the Python SDK `create_trigger()`** — it sends a `metadata` field the API rejects.
-> Always use `az rest` with the schema above (`connectionDetails` + `notificationDetails`).
-
-**Summary of the trigger flow:**
-1. Discover trigger operations → present to user → STOP and wait
-2. Collect trigger parameters (same dynamic value rules as Step 5A)
-3. Ask user for sandbox (existing or new) + callback type (ShellCommand / InvokePort)
-4. Create trigger + access policy + role assignment (**run in parallel**)
+1. Discover trigger operations: `GET .../managedApis/{connector}/apiOperations?api-version=2016-06-01` → filter for `properties.trigger`
+2. If trigger type is `batch` (polling): inform user it polls every ~3 minutes by default. Ask if they want a different interval.
+3. Collect parameters (resolve `x-ms-dynamic-*` via Swagger + dynamicInvoke)
+3. Ask user: sandbox (existing/new) + callback type (ShellCommand / ExecuteCommand / InvokePort)
+4. Create trigger + access policy + role assignment (**run in parallel**) — canonical template in [trigger-setup.md](references/trigger-setup.md) Step 8B
 5. Verify trigger state is `Enabled`
 
-**Key decisions:**
-- **ShellCommand**: auto-resumes sandbox, but does NOT pass event data to handler
-- **InvokePort**: passes event data in POST body, but sandbox must be running
-- **ShellCommand + ExecuteCommand**: need RBAC role `c24cf47c-5077-412d-a19c-45202126392c` on sandbox group
-- **InvokePort**: needs port auth (gateway principalId in entraId objectIds)
+> **⚠️ Do NOT use `callbackTarget`** — that field does not exist. Correct schema: `metadata` + `notificationDetails`. See [trigger-setup.md](references/trigger-setup.md).
 
-After trigger creation → proceed to handler deployment.
-See [handler-guide.md](references/handler-guide.md) for handler development.
+| Target | Callback URL | Notes |
+|--------|-------------|-------|
+| ShellCommand | `.../executeShellCommand` | Auto-resumes sandbox; needs RBAC `c24cf47c-...` on sandbox group |
+| ExecuteCommand | `.../executeCommand` | Same as above, no shell interpretation |
+| InvokePort | `https://{id}--{port}.proxy.azuredevcompute.io/...` | Sandbox must be running; needs port auth |
+
+After trigger creation → deploy handler. See [handler-guide.md](references/handler-guide.md).
 
 ---
 
@@ -248,8 +212,11 @@ az rest --method GET --url ".../connectorGateways/{gw}?api-version=2026-05-01-pr
 # Connections
 az rest --method GET --url ".../connectorGateways/{gw}/connections?api-version=2026-05-01-preview"
 
-# List operations
-az rest --method POST --url ".../connectorGateways/{gw}/listOperations?api-version=2026-05-01-preview" --body '{"connectorName":"{type}"}'
+# List operations (summaries + trigger types)
+az rest --method GET --url ".../providers/Microsoft.Web/locations/{location}/managedApis/{connector}/apiOperations?api-version=2016-06-01"
+
+# Get Swagger (full paths, parameters, x-ms-dynamic-* extensions)
+az rest --method GET --url ".../providers/Microsoft.Web/locations/{location}/managedApis/{connector}" --url-parameters "api-version=2016-06-01" "export=true"
 
 # Dynamic invoke
 az rest --method POST --url ".../connectorGateways/{gw}/connections/{conn}/dynamicInvoke?api-version=2026-05-01-preview" --body '{"request":{"method":"GET","path":"/..."}}'

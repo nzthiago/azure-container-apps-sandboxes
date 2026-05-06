@@ -5,12 +5,18 @@ Detailed commands for creating event-driven triggers on a connector gateway.
 ## Step 5B: Discover trigger operations
 
 ```bash
-az rest --method POST \
-  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/listOperations?api-version=2026-05-01-preview" \
-  --body '{"connectorName":"office365"}'
-# Filter response for trigger operations (type contains "trigger")
+# Discover operations for the connector
+az rest --method GET \
+  --url "https://management.azure.com/subscriptions/{sub}/providers/Microsoft.Web/locations/{location}/managedApis/office365/apiOperations?api-version=2016-06-01"
+# Filter: trigger operations have non-empty "properties.trigger" field
 ```
 Present operations as choices (summary + operationId). Let user pick.
+
+> **⚠️ Recurrence/polling triggers** (trigger type = `batch`): These check for new items on a
+> polling interval — **default is every ~3 minutes**. After the user selects a batch trigger,
+> ask: "This trigger polls every ~3 minutes by default. Would you like a different interval?"
+> If yes, add a `recurrence` parameter (e.g., `{"name": "recurrence", "value": {"frequency": "Minute", "interval": 15}}`).
+> Real-time triggers (type = `single`) fire immediately on events — no polling interval.
 
 ## Step 6B: Collect trigger parameters
 
@@ -66,35 +72,43 @@ Ask for callback type:
 
 ### Trigger creation
 
-> **⚠️ The trigger API uses `connectionDetails` + `notificationDetails`, NOT `connectorName` + `connectionName` at top level.**
-> The SDK's `create_trigger()` sends a `metadata` field that the API rejects. Use `az rest` with the exact body below.
+> **⚠️ The trigger API uses `metadata` + `notificationDetails` with a full `callbackUrl`. `callbackTarget` does NOT exist.**
+> The correct schema: `connectionDetails` (connector+connection), `metadata` (sandbox info), `notificationDetails` (callbackUrl, auth, body), `operationName`, `parameters`.
 
 ```powershell
 # Build trigger config body — ShellCommand example
+# First construct the callback URL:
+$callbackUrl = "https://management.azuredevcompute.io/subscriptions/{sub}/resourceGroups/{rg}/sandboxGroups/{sandbox_group}/sandboxes/{sandbox_id}/executeShellCommand?api-version=2026-02-01-preview"
+
 $triggerBody = @{
   properties = @{
     connectionDetails = @{
       connectorName = "office365"
       connectionName = "{conn}"
     }
-    notificationDetails = @{
-      operationName = "OnNewEmailV3"
-      parameters = @(
-        @{ name = "folderPath"; value = "Inbox" }
-      )
-    }
-    callbackTarget = @{
-      sandboxId = "{sandbox_id}"
+    metadata = @{
       sandboxGroupName = "{sandbox_group}"
-      command = "python /app/handler.py"
+      sandboxId = "{sandbox_id}"
     }
+    notificationDetails = @{
+      authentication = @{ audience = "https://management.azuredevcompute.io/"; type = "ManagedServiceIdentity" }
+      body = @{ activationMode = "OnDemand"; command = "python /app/handler.py" }
+      callbackUrl = $callbackUrl
+      httpMethod = "Post"
+    }
+    operationName = "OnNewEmailV3"
+    parameters = @(
+      @{ name = "folderPath"; value = "Inbox" }
+    )
   }
 } | ConvertTo-Json -Depth 6 -Compress
 
-# For ExecuteCommand target — replace command with:
-#   "executeCommand" = "python"; "executeArgs" = @("/app/handler.py", "--verbose")
-# For InvokePort target — replace command with:
-#   "port" = 5000; "portPath" = "/webhook"; "httpMethod" = "POST"
+# For InvokePort target — replace notificationDetails with:
+#   callbackUrl = "https://{sandbox_id}--5000.proxy.azuredevcompute.io/webhook"
+#   httpMethod = "Post"  (omit body and authentication from notificationDetails)
+#   NOTE: Port-level auth IS still required — add gateway principalId to port's entraId objectIds
+# For ExecuteCommand target — change callbackUrl to .../executeCommand and body to:
+#   @{ activationMode = "OnDemand"; command = "python"; args = @("/app/handler.py") }
 
 $tmpBody = New-TemporaryFile; Set-Content $tmpBody $triggerBody
 az rest --method PUT `

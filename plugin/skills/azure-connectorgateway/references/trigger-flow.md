@@ -65,40 +65,12 @@ aca sandbox create -g my-rg --group my-sg --disk ubuntu
 
 ### Step 4: Create Trigger Config
 
-```powershell
-# Build trigger body — ShellCommand example
-# NOTE: API uses connectionDetails + notificationDetails (NOT flat connectorName/operationName)
-$triggerBody = @{
-  properties = @{
-    connectionDetails = @{
-      connectorName = "office365"
-      connectionName = "o365-conn"
-    }
-    notificationDetails = @{
-      operationName = "OnNewEmailV3"
-      parameters = @(
-        @{ name = "folderPath"; value = "Inbox" }
-      )
-    }
-    callbackTarget = @{
-      sandboxId = "{sandbox_id}"
-      sandboxGroupName = "my-sg"
-      command = "python /app/handle_email.py"
-    }
-  }
-} | ConvertTo-Json -Depth 6 -Compress
+→ **See [trigger-setup.md](trigger-setup.md) Step 8B** for the canonical trigger body template (ShellCommand, ExecuteCommand, InvokePort variants).
 
-$tmpBody = New-TemporaryFile; Set-Content $tmpBody $triggerBody
-az rest --method PUT `
-  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/my-rg/providers/Microsoft.Web/connectorGateways/my-gw/triggerConfigs/email-handler?api-version=2026-05-01-preview" `
-  --body "@$tmpBody"
-Remove-Item $tmpBody
-
-# For InvokePort target, replace callbackTarget with:
-#   "port" = 5000; "portPath" = "/webhook"; "httpMethod" = "POST"
-# For ExecuteCommand target, replace with:
-#   "executeCommand" = "python"; "executeArgs" = @("/app/handle_email.py", "--verbose")
-```
+Key points:
+- Schema uses `metadata` + `notificationDetails` (callbackUrl/body/auth). `callbackTarget` does NOT exist.
+- `operationName` and `parameters` go at `properties` root level.
+- Always use `@$tmpFile` pattern for `az rest --body`.
 
 ### Step 5: Grant Access Policy
 
@@ -121,10 +93,10 @@ az rest --method PUT `
 ### Step 6: Discover Trigger Operations (optional)
 
 ```bash
-az rest --method POST \
-  --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/my-rg/providers/Microsoft.Web/connectorGateways/my-gw/listOperations?api-version=2026-05-01-preview" \
-  --body '{"connectorName":"office365"}'
-# Filter for trigger operations (triggerType field present)
+# Discover operations for the connector
+az rest --method GET \
+  --url "https://management.azure.com/subscriptions/{sub}/providers/Microsoft.Web/locations/{location}/managedApis/office365/apiOperations?api-version=2016-06-01"
+# Filter: trigger operations have non-empty "properties.trigger" field
 ```
 
 ### Step 7: Manage Trigger Lifecycle
@@ -196,5 +168,5 @@ objectIds to authenticate. The proxy URL uses `audience: https://auth.adcproxy.i
 | Gateway can't subscribe | Create an access policy for the gateway MI on the connection |
 | Sandbox not responding | Ensure sandbox is Running; for ShellCommand, use `activationMode: OnDemand` |
 | Port auth failure | Add gateway principalId to port's `auth.entraId.objectIds` on the sandbox |
-| Parameters rejected | Use `list_trigger_operations` to get exact parameter names from Swagger |
-| Cleanup order | Delete trigger config → sandbox → gateway (gateway deletion cascades connections) |
+| Parameters rejected | Get exact parameter names from the connector Swagger (`managedApis/{connector}?export=true`) |
+| Cleanup order | Delete trigger config → access policies → connection → sandbox → gateway. Always delete triggers first. |
