@@ -56,8 +56,32 @@ to sandbox apps via direct API calls or event-driven triggers.
 
 **When to EXECUTE immediately:** creating gateways/connections/triggers/policies, deploying handlers, setting egress, installing deps.
 
-### Step 0: Prerequisites (run silently)
-Check `az account show` and `aca --version`. If missing, see [prerequisites.md](references/prerequisites.md) for install + SDK fallback.
+### Step 0: Prerequisites & Azure context
+
+1. Check `az account show` and `aca --version`. If missing, see [prerequisites.md](references/prerequisites.md).
+
+2. **Select subscription** — list available subscriptions, ask the user to pick:
+   ```bash
+   az account list --query "[].{name:name, id:id, isDefault:isDefault}" -o table
+   ```
+   Present the list and ask: "Which subscription do you want to use?"
+   If the user picks a non-default subscription, set it:
+   ```bash
+   az account set --subscription "{selected_subscription_id}"
+   ```
+   Store the subscription ID for all subsequent commands.
+
+3. **Select resource group** — ask: "Do you have an existing resource group, or should I create one?"
+   - If **existing**: list and let user pick:
+     ```bash
+     az group list --query "[].{name:name, location:location}" -o table
+     ```
+   - If **new**: ask for name + location, then create:
+     ```bash
+     az group create --name {rg} --location {location}
+     ```
+
+**Stop and wait for the user's answers before continuing.**
 
 ### Step 1: Understand the scenario
 Ask the user:
@@ -88,17 +112,17 @@ Ask the user:
 
 > **ARM base URL:** `https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways`
 > **API version:** `api-version=2026-05-01-preview`
-> Use `az account show --query id -o tsv` to get the subscription ID.
+> Use the subscription and resource group selected in Step 0.
 
 Ask the user:
 - "Do you have an existing connector gateway, or should I create a new one?"
-- If **existing**: ask for resource group + gateway name, then retrieve it:
+- If **existing**: ask for the gateway name, then retrieve it (using sub/rg from Step 0):
   ```bash
   az rest --method GET \
     --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}?api-version=2026-05-01-preview" \
     --query "{name:name, principalId:identity.principalId, tenantId:identity.tenantId}"
   ```
-- If **new**: ask for resource group + gateway name + location, then **create it
+- If **new**: ask for gateway name + location, then **create it
   immediately** with a SystemAssigned managed identity (required for trigger callbacks):
   ```powershell
   $gwBody = @{ location = "{location}"; identity = @{ type = "SystemAssigned" } } | ConvertTo-Json -Compress
@@ -115,7 +139,7 @@ Ask the user:
   ```bash
   az rest --method GET \
     --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections?api-version=2026-05-01-preview" \
-    --query "value[].{name:name, status:properties.statuses[0].status, api:properties.api.name}"
+    --query "value[].{name:name, status:properties.statuses[0].status, connector:properties.connectorName}"
   ```
 
 **Once you have the gateway info, proceed immediately to Step 3.**
@@ -126,7 +150,7 @@ Create ALL needed connections in parallel, then consent all at once:
 
 ```powershell
 # Create connections (parallel tool calls if multiple):
-$connBody = @{ properties = @{ api = @{ name = "office365" } }; location = "{location}" } | ConvertTo-Json -Compress
+$connBody = @{ properties = @{ connectorName = "office365" }; location = "{location}" } | ConvertTo-Json -Compress
 $tmp = New-TemporaryFile; Set-Content $tmp $connBody
 az rest --method PUT `
   --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/o365-conn?api-version=2026-05-01-preview" `
@@ -204,7 +228,7 @@ After trigger creation → deploy handler. See [handler-guide.md](references/han
 
 **For Direct API calls (path A):**
 - ✅ Gateway exists, connection `Connected`, `connectionRuntimeUrl` available
-- ✅ Access policy: sandbox group MI → connection
+- ✅ Access policy: sandbox group MI → connection (sandbox group must have SystemAssigned identity enabled — if `identity.principalId` is null, run `aca sandboxgroup update -g {rg} -n {sg} --identity SystemAssigned`)
 - ✅ Egress transform: resource `https://management.core.windows.net/`, format `Bearer {value}`
 - ✅ Test call from sandbox works (no auth header needed)
 

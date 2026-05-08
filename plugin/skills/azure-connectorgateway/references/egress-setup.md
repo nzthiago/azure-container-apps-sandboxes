@@ -2,9 +2,9 @@
 
 How to configure a sandbox to call connection runtime URLs directly.
 
-> **⚠️ SDK import path:** Try `from sandbox import SandboxClient` first.
-> If that fails, try `from azure.containerapps.sandbox import SandboxClient`.
-> The package name varies by installation method.
+> **⚠️ Egress setup uses `az rest` against the ADC data plane.**
+> The Python SDK (`SandboxClient`) is not shipped with the current CLI release.
+> Use the `az rest` commands below instead.
 
 ## Overview
 
@@ -49,67 +49,64 @@ NO auth header — the platform handles it.
 
 > **⚠️ The sandbox MUST be running** before setting egress policy.
 > If stopped, resume it first:
-> ```python
-> python -c "
-> from azure.containerapps.sandbox import SandboxClient
-> client = SandboxClient(resource_group='{rg}')
-> client.resume_sandbox('{sandbox_id}', '{sandbox_group}')
-> import time; time.sleep(5)
-> sbx = client.get_sandbox('{sandbox_id}', '{sandbox_group}')
-> print('State:', sbx.get('state'))
-> "
+> ```bash
+> aca sandbox resume -g {rg} --group {sg} --id {sandbox_id}
+> # Wait for Running state
+> aca sandbox show -g {rg} --group {sg} --id {sandbox_id} --query "state"
 > ```
 
-**Use the Sandbox SDK** (simplest and most reliable):
-```python
-python -c "
-from urllib.parse import urlparse
-from azure.containerapps.sandbox import SandboxClient
-client = SandboxClient(resource_group='{rg}')
-runtime_url = '{connectionRuntimeUrl}'
-host = urlparse(runtime_url).hostname
-result = client.add_egress_transform_rule(
-    '{sandbox_id}', '{sandbox_group}',
-    host=host,
-    headers=[{
-        'operation': 'Set',
-        'name': 'Authorization',
-        'valueRef': {'managedIdentityRef': {
-            'resource': 'https://management.core.windows.net/',
-            'format': 'Bearer {value}',
-            'type': 'SystemAssigned'
-        }}
-    }],
-    name='connection-auth')
-print('Egress transform set:', result.get('rules', [{}])[-1].get('name'))
-"
+**Use `az rest` to set the egress policy** (POST to ADC data plane):
+
+```powershell
+# Extract hostname from connectionRuntimeUrl
+$runtimeUrl = "{connectionRuntimeUrl}"
+$host = ([System.Uri]$runtimeUrl).Host
+
+# Build egress policy body — this REPLACES all existing rules
+$egressBody = @{
+  defaultAction = "Allow"
+  rules = @(@{
+    name = "connection-auth"
+    match = @{ host = $host }
+    action = @{
+      type = "Transform"
+      headers = @(@{
+        operation = "Set"
+        name = "Authorization"
+        valueRef = @{
+          managedIdentityRef = @{
+            resource = "https://management.core.windows.net/"
+            format = "Bearer {value}"
+            type = "SystemAssigned"
+          }
+        }
+      })
+    }
+  })
+} | ConvertTo-Json -Depth 8 -Compress
+
+$tmp = New-TemporaryFile; Set-Content $tmp $egressBody
+az rest --method POST `
+  --url "https://management.azuredevcompute.io/subscriptions/{sub}/resourceGroups/{rg}/sandboxGroups/{sg}/sandboxes/{sandbox_id}/egresspolicy?api-version=2026-02-01-preview" `
+  --body "@$tmp" `
+  --resource "https://management.azuredevcompute.io/"
+Remove-Item $tmp
 ```
 
-Or set the full policy (replaces all rules):
-```python
-python -c "
-from urllib.parse import urlparse
-from azure.containerapps.sandbox import SandboxClient
-client = SandboxClient(resource_group='{rg}')
-runtime_url = '{connectionRuntimeUrl}'
-host = urlparse(runtime_url).hostname
-policy = {'defaultAction': 'Allow', 'rules': [{'name': 'connection-auth', 'match': {'host': host}, 'action': {'type': 'Transform', 'headers': [{'operation': 'Set', 'name': 'Authorization', 'valueRef': {'managedIdentityRef': {'resource': 'https://management.core.windows.net/', 'format': 'Bearer {value}', 'type': 'SystemAssigned'}}}]}}]}
-result = client.set_egress_policy('{sandbox_id}', '{sandbox_group}', policy)
-print('Egress policy set. Rules:', len(result.get('rules', [])))
-"
-```
+> **⚠️ This is a REPLACE operation** — the policy body replaces ALL existing egress rules.
+> If the sandbox already has egress rules you want to keep, GET the current policy first,
+> append the new rule, then POST the combined set.
 
 ## Critical details for egress transform
 
 | Detail | Value |
 |--------|-------|
-| **SDK methods** | `client.add_egress_transform_rule()` (appends) or `client.set_egress_policy()` (replaces all) |
 | **API endpoint** | POST to `https://management.azuredevcompute.io/.../sandboxes/{id}/egresspolicy` (lowercase, POST method) |
+| **Semantics** | The POST **replaces all rules**. To preserve existing rules, GET first, append, then POST the combined set |
 | **Token resource** | `https://management.core.windows.net/` — NOT `https://management.azure.com/`, NOT `https://apihub.azure.com/.default` |
 | **Format** | `"Bearer {value}"` — only `{value}` works as placeholder, NOT `{token}` |
 | **Match host** | Extract hostname from `connectionRuntimeUrl`. One rule covers all connections on that gateway |
 | **type** | Must be `"SystemAssigned"` — the sandbox group's system MI |
-| **set vs add** | `set_egress_policy` replaces ALL rules. Use `add_egress_transform_rule` to append |
 
 ## Step 4: Test the connection from inside the sandbox
 

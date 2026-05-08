@@ -47,7 +47,7 @@ az rest --method PUT \
 # Create connection
 az rest --method PUT \
   --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/my-rg/providers/Microsoft.Web/connectorGateways/my-gw/connections/o365-conn?api-version=2026-05-01-preview" \
-  --body '{"properties":{"api":{"name":"office365"}},"location":"brazilsouth"}'
+  --body '{"properties":{"connectorName":"office365"},"location":"brazilsouth"}'
 ```
 
 Then generate consent link and open in browser — see **SKILL.md Step 3** for the exact
@@ -59,8 +59,14 @@ Then generate consent link and open in browser — see **SKILL.md Step 3** for t
 # Create sandbox group (uses aca CLI from azure-sandbox skill)
 aca sandboxgroup create -g my-rg -n my-sg -l eastus2
 
+# Enable system-assigned managed identity (create doesn't support --identity)
+aca sandboxgroup update -g my-rg -n my-sg --identity SystemAssigned
+
 # Create sandbox
 aca sandbox create -g my-rg --group my-sg --disk ubuntu
+
+# Install Python if handler uses it (ubuntu image has no Python pre-installed)
+aca sandbox exec -g my-rg --group my-sg --id {sandbox_id} -c "apt update && apt install -y python3 python3-pip python3-requests"
 ```
 
 ### Step 4: Create Trigger Config

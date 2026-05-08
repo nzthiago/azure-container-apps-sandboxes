@@ -143,22 +143,30 @@ else:
 O365_URL = os.environ.get("O365_RUNTIME_URL", "https://....azure-apihub.net/apim/office365/...")
 ONEDRIVE_URL = os.environ.get("ONEDRIVE_RUNTIME_URL", "https://....azure-apihub.net/apim/onedriveforbusiness/...")
 
-def http_get(url, retries=3, delay=2):
-    """GET with retry — connector API can be intermittent."""
+def http_get(url, retries=3, delay=5, timeout=120):
+    """GET with retry — connector API can be intermittent. Cold-start may cause 504s."""
     for attempt in range(retries):
-        resp = requests.get(url, verify=SSL_VERIFY)
-        if resp.status_code == 200:
-            return resp.json()
+        try:
+            resp = requests.get(url, verify=SSL_VERIFY, timeout=timeout)
+            if resp.status_code == 200:
+                return resp.json()
+            if resp.status_code in (502, 503, 504) and attempt < retries - 1:
+                time.sleep(delay * (attempt + 1))
+                continue
+        except requests.exceptions.Timeout:
+            if attempt < retries - 1:
+                time.sleep(delay * (attempt + 1))
+                continue
         if attempt < retries - 1:
             time.sleep(delay)
     return None
 
-def http_post(url, data=None, json_body=None, content_type="application/json"):
-    """POST to runtime URL."""
+def http_post(url, data=None, json_body=None, content_type="application/json", timeout=120):
+    """POST to runtime URL. timeout=120 handles cold-start latency (first call may take 60s+)."""
     headers = {"Content-Type": content_type}
     if json_body:
-        return requests.post(url, json=json_body, headers=headers, verify=SSL_VERIFY)
-    return requests.post(url, data=data, headers=headers, verify=SSL_VERIFY)
+        return requests.post(url, json=json_body, headers=headers, verify=SSL_VERIFY, timeout=timeout)
+    return requests.post(url, data=data, headers=headers, verify=SSL_VERIFY, timeout=timeout)
 
 def main():
     # 1. Fetch data from source connector

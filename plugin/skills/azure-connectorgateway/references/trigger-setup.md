@@ -48,19 +48,43 @@ parameters = [
 
 ## Step 7B: Sandbox target
 
-Ask user for existing sandbox or create new:
-```bash
-# List existing groups (prefer reuse — new groups take 5-20 min to propagate)
-aca sandboxgroup list -g {rg}
+Ask the user: "Do you have an existing sandbox group, or should I create a new one?"
 
-# Create new group if needed
+**If existing:** List available groups and let the user pick:
+```bash
+aca sandboxgroup list -g {rg} --query "[].{name:name, location:location, identity:identity.type}" -o table
+```
+Present the list. After the user selects, verify it has a managed identity:
+```bash
+aca sandboxgroup show -g {rg} -n {sg} --query "identity.principalId" -o tsv
+```
+If `principalId` is empty/null, enable MI:
+```bash
+aca sandboxgroup update -g {rg} -n {sg} --identity SystemAssigned
+```
+
+**If new:** Ask for a name + location, then create:
+```bash
+# Create sandbox group
 aca sandboxgroup create -g {rg} -n {sg} -l {location}
 
+# Enable system-assigned managed identity (create doesn't support --identity)
+aca sandboxgroup update -g {rg} -n {sg} --identity SystemAssigned
+# Verify: aca sandboxgroup show -g {rg} -n {sg} --query "identity.principalId"
+```
+
+> **⚠️ New groups take 5–20 min to propagate to the data plane.** Prefer reusing existing groups when possible.
+
+**Then create a sandbox** (in existing or new group):
+```bash
 # Create sandbox (retry with backoff if SandboxGroupNotFound)
 aca sandbox create -g {rg} --group {sg} --disk ubuntu
 
 # Wait for Running state
 aca sandbox show -g {rg} --group {sg} --id {sandbox_id} --query "state"
+
+# Install Python if handler uses it (ubuntu image has no Python pre-installed)
+aca sandbox exec -g {rg} --group {sg} --id {sandbox_id} -c "apt update && apt install -y python3 python3-pip python3-requests"
 ```
 
 > **⚠️ Identity (principalId) is on the sandbox GROUP, not individual sandboxes.**

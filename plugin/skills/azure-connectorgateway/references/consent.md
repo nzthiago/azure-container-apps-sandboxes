@@ -8,8 +8,8 @@ How to generate consent links and authenticate connections.
 # Get the connection's objectId and tenantId first
 $conn = az rest --method GET `
   --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/connectorGateways/{gw}/connections/{conn}?api-version=2026-05-01-preview" | ConvertFrom-Json
-$objectId = $conn.properties.authenticatedUser.name
-$tenantId = $conn.properties.authenticatedUser.tenantId
+$objectId = $conn.properties.createdBy.name
+$tenantId = $conn.properties.createdBy.tenantId
 
 # Build consent body — EXACT format required (parameters array)
 $body = @{
@@ -37,7 +37,7 @@ Start-Process $link
 - **Use `"redirectUrl":"https://microsoft.com"`** — default redirect is broken
 - **Do NOT retry with different body formats** — if consent fails, it's a service issue
 - **Body format is exact:** `{"parameters":[{"objectId":"...","tenantId":"...","redirectUrl":"https://microsoft.com","parameterName":"token"}]}`
-- Get `objectId` and `tenantId` from the connection's `properties.authenticatedUser`
+- Get `objectId` and `tenantId` from the connection's `properties.createdBy`
 
 ## Verify connection status
 
