@@ -279,3 +279,4 @@ az rest --method GET --url ".../connectorGateways/{gw}/triggerConfigs/{name}?api
 - [trigger-flow.md](references/trigger-flow.md) — Trigger architecture details
 - [prerequisites.md](references/prerequisites.md) — Setup requirements
 - [quickstart.md](references/quickstart.md) — Quick start guide
+- [tutorial-welcome-emailer.md](references/tutorial-welcome-emailer.md) — Pattern A walkthrough: deploy a welcome emailer to a sandbox
