@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Acme Expense Report</title>
+  <style>
+    :root { color-scheme: light; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      max-width: 720px;
+      margin: 24px auto;
+      padding: 0 20px 40px;
+      color: #1a1a1a;
+    }
+    h1 { font-size: 22px; margin-bottom: 4px; }
+    .subtitle { color: #666; margin-top: 0; font-size: 14px; }
+    fieldset {
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 16px 20px;
+      margin-bottom: 18px;
+    }
+    legend { padding: 0 8px; font-weight: 600; }
+    label { display: block; margin: 10px 0 4px; font-size: 14px; }
+    input[type=text], input[type=number], input[type=date], select {
+      width: 100%;
+      padding: 8px 10px;
+      font-size: 14px;
+      border: 1px solid #c0c0c0;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    .row { display: flex; gap: 12px; }
+    .row > div { flex: 1; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
+    th { background: #f7f7f7; font-size: 12px; text-transform: uppercase; }
+    button {
+      padding: 10px 18px;
+      font-size: 14px;
+      border-radius: 4px;
+      border: 1px solid #1f6feb;
+      background: #1f6feb;
+      color: white;
+      cursor: pointer;
+    }
+    button.secondary { background: white; color: #1f6feb; }
+    .actions { display: flex; gap: 10px; margin-top: 16px; }
+    .total {
+      font-size: 16px;
+      font-weight: 600;
+      margin-top: 12px;
+      text-align: right;
+    }
+    .ok {
+      padding: 14px 18px;
+      background: #e6f4ea;
+      border: 1px solid #34a853;
+      border-radius: 6px;
+      color: #1e6b35;
+      margin-top: 18px;
+    }
+    .ok pre { margin: 8px 0 0; background: #fff; padding: 10px; border-radius: 4px;
+              font-size: 12px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>Acme Corp — Expense Report</h1>
+  <p class="subtitle">Fill in trip details, add line items, and submit.</p>
+
+  <form id="expense-form" autocomplete="off">
+    <fieldset>
+      <legend>Trip details</legend>
+      <label for="trip-name">Trip name</label>
+      <input id="trip-name" name="trip_name" type="text" required>
+
+      <div class="row">
+        <div>
+          <label for="start-date">Start date</label>
+          <input id="start-date" name="start_date" type="date" required>
+        </div>
+        <div>
+          <label for="end-date">End date</label>
+          <input id="end-date" name="end_date" type="date" required>
+        </div>
+      </div>
+
+      <label for="purpose">Business purpose</label>
+      <input id="purpose" name="purpose" type="text" required>
+    </fieldset>
+
+    <fieldset>
+      <legend>Line items</legend>
+      <table id="items-table">
+        <thead>
+          <tr><th>Category</th><th>Description</th><th>Amount (USD)</th><th></th></tr>
+        </thead>
+        <tbody id="items-body">
+          <!-- rows inserted by JS -->
+        </tbody>
+      </table>
+      <div class="actions">
+        <button type="button" id="add-item" class="secondary">Add line item</button>
+      </div>
+      <div class="total">Total: <span id="total">$0.00</span></div>
+    </fieldset>
+
+    <div class="actions">
+      <button type="submit" id="submit-btn">Submit expense report</button>
+    </div>
+  </form>
+
+  <div id="result" class="ok" style="display:none">
+    <strong>Submitted.</strong>
+    <pre id="result-body"></pre>
+  </div>
+
+<script>
+const CATEGORIES = ["Airfare", "Hotel", "Meals", "Ground transport", "Other"];
+
+function addRow(prefill) {
+  const tbody = document.getElementById("items-body");
+  const idx = tbody.children.length;
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td>
+      <select name="cat-${idx}">
+        ${CATEGORIES.map(c => `<option>${c}</option>`).join("")}
+      </select>
+    </td>
+    <td><input type="text" name="desc-${idx}" placeholder="e.g. Flight SEA->JFK"></td>
+    <td><input type="number" name="amt-${idx}" min="0" step="0.01" value="0" onchange="recompute()"></td>
+    <td><button type="button" class="secondary" onclick="this.closest('tr').remove(); recompute();">Remove</button></td>
+  `;
+  tbody.appendChild(tr);
+  if (prefill) {
+    tr.querySelector(`select[name="cat-${idx}"]`).value = prefill.category;
+    tr.querySelector(`input[name="desc-${idx}"]`).value = prefill.description;
+    tr.querySelector(`input[name="amt-${idx}"]`).value = prefill.amount;
+  }
+  recompute();
+}
+
+function recompute() {
+  let total = 0;
+  document.querySelectorAll('input[name^="amt-"]').forEach(i => {
+    total += parseFloat(i.value || "0");
+  });
+  document.getElementById("total").textContent =
+    "$" + total.toFixed(2);
+}
+
+function collect() {
+  const rows = [...document.querySelectorAll("#items-body tr")].map(tr => ({
+    category: tr.querySelector("select").value,
+    description: tr.querySelector('input[name^="desc-"]').value,
+    amount: parseFloat(tr.querySelector('input[name^="amt-"]').value || "0"),
+  }));
+  return {
+    trip_name: document.getElementById("trip-name").value,
+    start_date: document.getElementById("start-date").value,
+    end_date:   document.getElementById("end-date").value,
+    purpose:    document.getElementById("purpose").value,
+    items: rows,
+    total: rows.reduce((s, r) => s + r.amount, 0),
+  };
+}
+
+document.getElementById("add-item").addEventListener("click", () => addRow());
+document.getElementById("expense-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const payload = collect();
+  const r = await fetch("/submit", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload),
+  });
+  const ok = r.ok;
+  const body = document.getElementById("result-body");
+  body.textContent = JSON.stringify(payload, null, 2);
+  document.getElementById("result").style.display = ok ? "block" : "none";
+});
+
+// Start with one empty row so the agent doesn't need to find the "Add line item"
+// button just to put down its first expense.
+addRow();
+</script>
+</body>
+</html>
