@@ -50,7 +50,7 @@ python sandboxes.py
 See [`setup/README.md`](setup/README.md) for the full setup
 documentation and how to override defaults.
 
-## Catalog
+## Samples
 
 ### Get Started with API essentials
 
