@@ -76,14 +76,14 @@ documentation and how to override defaults.
 | # | Scenario | What it will show | CLI | Python | Status |
 |---|---|---|---|---|---|
 | 01 | webapps | Run a web app in a sandbox; patterns include `simple-anonymous` (open to the internet) and (planned) `authenticated` (Entra-gated) | [CLI](cli/samples/01-webapps) | [Python](python/samples/01-webapps) | ✅ ready |
-| 02 | coding-agents | Run **Copilot CLI** in a sandbox with deny-default egress + portal-paste PAT injection (Python + CLI). Claude Code / Codex stubs included. | [CLI](cli/samples/02-coding-agents) | [Python](python/samples/02-coding-agents) | ✅ Copilot CLI ready |
-| 03 | code-interpreter | LLM-driven code execution — generate, run, observe, iterate | [CLI](cli/samples/03-code-interpreter) | [Python](python/samples/03-code-interpreter) | 📝 planned |
-| 04 | swarms | Orchestrator coordinating many sandbox workers — variants 01 (sandbox inception: orchestrator sandbox spawns workers in another group via its group's MI) and 02 (same plus an AzureBlob volume as durable shared scratchpad) ship now | [CLI](cli/samples/04-swarms) | [Python](python/samples/04-swarms) | ✅ ready |
-| 05 | data-processing | Producer/consumer pipelines on shared AzureBlob volumes | [CLI](cli/samples/05-data-processing) | [Python](python/samples/05-data-processing) | 📝 planned |
-| 06 | developer-workflows | PR builds, ephemeral CI, on-demand dev environments | [CLI](cli/samples/06-developer-workflows) | [Python](python/samples/06-developer-workflows) | 📝 planned |
-| 07 | computer-use | LLM computer-use agent (Azure OpenAI `computer-use-preview` / gpt-5.4) driving Chrome inside a sandbox to fill out a form or any web task; watch live via noVNC. Built on the OpenAI Agents SDK (`AsyncComputer` + `ComputerTool`). | [CLI](cli/samples/07-computer-use) | [Python](python/samples/07-computer-use) | ✅ OpenAI ready |
-| 08 | sandbox-agents | Agent frameworks (OpenAI Agents SDK, Claude Managed Agents, LangChain Deep Agents) using ACA sandboxes as their tool-execution backend. OpenAI ships a **first-class provider package** (`agents_aca_sandboxes`) plus a live Deep Research demo and a platform-architecture brief. | [CLI](cli/samples/08-sandbox-agents) | [Python](python/samples/08-sandbox-agents) | ✅ OpenAI provider + demo |
-| 09 | mcp-hosting | Host MCP servers in a sandbox — `excalidraw-anonymous` (public via `add_port`) and `dab-sql-devtunnel` (DAB + Postgres + Chinook, exposed via Dev Tunnels with **no inbound port** on the sandbox) | [CLI](cli/samples/09-mcp-hosting) | [Python](python/samples/09-mcp-hosting) | ✅ Python ready · 📝 CLI planned |
+| 02 | coding-agents | Run **Copilot CLI** in a sandbox with deny-default egress + portal-paste PAT injection (Python + CLI). Claude Code / Codex stubs included. | — | — | 🔜 coming soon |
+| 03 | code-interpreter | LLM-driven code execution — generate, run, observe, iterate | — | — | 🔜 coming soon |
+| 04 | swarms | Orchestrator coordinating many sandbox workers — variants 01 (sandbox inception: orchestrator sandbox spawns workers in another group via its group's MI) and 02 (same plus an AzureBlob volume as durable shared scratchpad) ship now | — | — | 🔜 coming soon |
+| 05 | data-processing | Producer/consumer pipelines on shared AzureBlob volumes | — | — | 🔜 coming soon |
+| 06 | developer-workflows | PR builds, ephemeral CI, on-demand dev environments | — | — | 🔜 coming soon |
+| 07 | computer-use | LLM computer-use agent (Azure OpenAI `computer-use-preview` / gpt-5.4) driving Chrome inside a sandbox to fill out a form or any web task; watch live via noVNC. Built on the OpenAI Agents SDK (`AsyncComputer` + `ComputerTool`). | — | — | 🔜 coming soon |
+| 08 | sandbox-agents | Agent frameworks (OpenAI Agents SDK, Claude Managed Agents, LangChain Deep Agents) using ACA sandboxes as their tool-execution backend. OpenAI ships a **first-class provider package** (`agents_aca_sandboxes`) plus a live Deep Research demo and a platform-architecture brief. | — | — | 🔜 coming soon |
+| 09 | mcp-hosting | Host MCP servers in a sandbox — `excalidraw-anonymous` (public via `add_port`) and `dab-sql-devtunnel` (DAB + Postgres + Chinook, exposed via Dev Tunnels with **no inbound port** on the sandbox) | — | — | 🔜 coming soon |
 
 ## Reference
 
