@@ -85,12 +85,22 @@ done
 [[ -f "$dir/.env" ]] || { echo "error: .env not found - run scenario setup first (bash ../setup/setup.sh)" >&2; exit 1; }
 set -a; . "$dir/.env"; set +a
 
+# Strip carriage returns that arrive when .env is CRLF-encoded
+# (common on Windows). Without this, every value ends with \r and ARM
+# URLs / `aca` CLI args silently break.
+for _v in AZURE_SUBSCRIPTION_ID ACA_RESOURCE_GROUP ACA_SANDBOX_GROUP \
+          ACA_SANDBOXGROUP_REGION ACA_CONNECTOR_GATEWAY \
+          ACA_CONNECTOR_CONNECTION ACA_CONNECTOR_GATEWAY_REGION \
+          ACA_USER_EMAIL TRIAGE_RECIPIENT \
+          COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN; do
+    eval "$_v=\"\${$_v%\$'\r'}\""
+done
+unset _v
+
 REQUIRED=(
     AZURE_SUBSCRIPTION_ID ACA_RESOURCE_GROUP ACA_SANDBOX_GROUP
     ACA_SANDBOXGROUP_REGION
     ACA_CONNECTOR_GATEWAY ACA_CONNECTOR_CONNECTION
-    ACA_CONNECTOR_GATEWAY_PRINCIPAL_ID
-    ACA_CONNECTOR_CONNECTION_RUNTIME_URL
 )
 for v in "${REQUIRED[@]}"; do
     if [[ -z "${!v:-}" ]]; then
@@ -103,18 +113,57 @@ done
 SUB="$AZURE_SUBSCRIPTION_ID"
 RG="$ACA_RESOURCE_GROUP"
 SG="$ACA_SANDBOX_GROUP"
-REGION="$ACA_SANDBOXGROUP_REGION"
 GW="$ACA_CONNECTOR_GATEWAY"
 CONN="$ACA_CONNECTOR_CONNECTION"
-GW_PRINCIPAL="$ACA_CONNECTOR_GATEWAY_PRINCIPAL_ID"
-GW_TENANT="${ACA_CONNECTOR_GATEWAY_TENANT_ID:-}"
-RUNTIME_URL="${ACA_CONNECTOR_CONNECTION_RUNTIME_URL%/}"
 USER_EMAIL="${ACA_USER_EMAIL:-}"
 TRIAGE_TO="${TRIAGE_RECIPIENT:-$USER_EMAIL}"
 if [[ -z "$TRIAGE_TO" || "$TRIAGE_TO" != *"@"* ]]; then
     echo "error: TRIAGE_RECIPIENT not set and ACA_USER_EMAIL is empty." >&2
     exit 1
 fi
+
+# Re-resolve gateway MI, connection runtime URL, and SG MI from ARM on
+# every run, then preflight the wiring. This is the drift-prevention
+# core: the previous implementation read these from .env, but they go
+# stale silently every time the connection/gateway/SG is recreated,
+# producing 401 missing-authorization-header from the platform proxy
+# with no obvious clue why. See setup/connector_common.sh for the full
+# rationale and check list.
+export ACA_RESOURCE_GROUP ACA_SANDBOX_GROUP ACA_CONNECTOR_GATEWAY ACA_CONNECTOR_CONNECTION
+# shellcheck source=../setup/connector_common.sh
+. "$(cd "$here/../setup" && pwd)/connector_common.sh"
+
+echo "==> Re-resolving gateway / connection / sandbox group from ARM..."
+if ! cc_resolve_all; then
+    echo "error: could not resolve current ARM state." >&2
+    echo "       Run 'azd provision' (or 'bash ../setup/setup.sh') to (re)create the gateway." >&2
+    exit 1
+fi
+
+echo "==> Preflight: validating wiring is in a state that injects auth..."
+cc_preflight
+if cc_preflight_failed; then
+    echo "" >&2
+    echo "error: preflight detected drift between the connection, ACLs, and the sandbox" >&2
+    echo "       group's gatewayConnections[]. Fix the items marked ✗ above by running:" >&2
+    echo "" >&2
+    echo "         bash ../setup/setup.sh         # fast: repairs ACLs + re-PATCH SG" >&2
+    echo "         # OR (heavier, if setup itself is broken):" >&2
+    echo "         azd down --purge && azd up     # full rebuild from scratch" >&2
+    echo "" >&2
+    exit 1
+fi
+echo "    preflight passed."
+
+# Derived values now come from ARM (cc_resolve_all populates these).
+GW_PRINCIPAL="$CC_GW_PRINCIPAL_ID"
+GW_TENANT="$CC_GW_TENANT_ID"
+RUNTIME_URL="$CC_RUNTIME_URL"
+RUNTIME_HOST="$CC_RUNTIME_HOST"
+# Use the sandbox group's actual location (from ARM) for the dataplane
+# endpoint — the .env value is only a default-at-creation-time and may
+# not match where SG actually got placed.
+REGION="${CC_SG_REGION:-$ACA_SANDBOXGROUP_REGION}"
 
 ARM_BASE="https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.Web/connectorGateways/$GW"
 DP_BASE="https://management.${REGION}.azuredevcompute.io/subscriptions/$SUB/resourceGroups/$RG/sandboxGroups/$SG/sandboxes"
@@ -137,16 +186,6 @@ if [[ -z "$_PY" ]]; then
     echo "error: need Python 3.7+ on PATH (tried 'python3' and 'python')." >&2
     exit 1
 fi
-
-# python helper here is just for URL parsing; the sandbox uses its own python3.
-host_from_url() {
-    "$_PY" - <<EOF "$1"
-import sys, urllib.parse
-print(urllib.parse.urlparse(sys.argv[1]).hostname or "")
-EOF
-}
-RUNTIME_HOST="$(host_from_url "$RUNTIME_URL")"
-[[ -n "$RUNTIME_HOST" ]] || { echo "error: could not parse host from ACA_CONNECTOR_CONNECTION_RUNTIME_URL=$RUNTIME_URL" >&2; exit 1; }
 
 TMPDIR_S="${TMPDIR:-/tmp}"
 TMPFILES=()
@@ -229,25 +268,23 @@ fi
 # ----- 1. Sandbox --------------------------------------------------------
 # Dataplane PUT (no sandbox id in URL, no api-version, no apiVersion
 # param — Cascade shape) so we can pass gatewayConnections[]. The
-# per-sandbox entry mirrors the SG-level entry shape ({resourceId,
-# connectionRuntimeUrl, authentication.type=SystemAssignedManagedIdentity})
-# so the platform's connector-gateway-aware proxy injects Bearer auth
-# automatically on every outbound call to the runtime URL.
+# per-sandbox entry contains ONLY {resourceId} — the full details
+# (connectionRuntimeUrl + authentication.type) live on the SG-level
+# gatewayConnections[] entry and are looked up by resourceId at runtime.
+# With this and the SG-level entry in place, the platform's connector-
+# gateway-aware proxy injects Bearer auth automatically on every
+# outbound call to the runtime URL.
 echo "==> Creating sandbox in '$SG' (labels.run=$RUN_ID) with gatewayConnections=[$CONN]..."
 CONNECTION_RESOURCE_ID="/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.Web/connectorGateways/$GW/connections/$CONN"
 SANDBOX_BODY="$(mktmp)"
-"$_PY" - "$CONNECTION_RESOURCE_ID" "$RUNTIME_URL" "$RUN_ID" > "$SANDBOX_BODY" <<'PYEOF'
+"$_PY" - "$CONNECTION_RESOURCE_ID" "$RUN_ID" > "$SANDBOX_BODY" <<'PYEOF'
 import json, sys
-resource_id, runtime_url, run_id = sys.argv[1], sys.argv[2], sys.argv[3]
+resource_id, run_id = sys.argv[1], sys.argv[2]
 print(json.dumps({
     "sourcesRef": {"diskImage": {"name": "copilot", "isPublic": True}},
     "vmmType": "CloudHypervisor",
     "resources": {"cpu": "2000m", "memory": "4096Mi", "disk": "20480Mi"},
-    "gatewayConnections": [{
-        "resourceId": resource_id,
-        "connectionRuntimeUrl": runtime_url,
-        "authentication": {"type": "SystemAssignedManagedIdentity"},
-    }],
+    "gatewayConnections": [{"resourceId": resource_id}],
     "labels": {"sample": "connector-trigger-email", "run": run_id},
 }))
 PYEOF

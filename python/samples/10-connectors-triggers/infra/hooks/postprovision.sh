@@ -174,9 +174,19 @@ echo "==> Connector scenario setup (gateway + connection + OAuth consent)..."
 "$PYTHON" "$SCENARIO_SETUP"
 
 # ----- Mirror .env -> azd env so 'azd env get-values' is rich -------------
+# Note: derived values (runtime URL, gateway/SG MI principalIds) are
+# DELIBERATELY excluded — they're re-resolved from ARM on every run.py
+# invocation. Mirroring them into azd env would let them go stale and
+# silently break run.py whenever the connection/gateway/SG is recreated.
 echo
 echo "==> Mirroring connector keys into azd env..."
-MIRROR="ACA_SANDBOX_GROUP ACA_SANDBOX_GROUP_PRINCIPAL_ID ACA_SANDBOXGROUP_REGION ACA_REGION ACA_CONNECTOR_GATEWAY ACA_CONNECTOR_GATEWAY_REGION ACA_CONNECTOR_GATEWAY_PRINCIPAL_ID ACA_CONNECTOR_GATEWAY_TENANT_ID ACA_CONNECTOR_CONNECTION ACA_CONNECTOR_CONNECTION_RUNTIME_URL ACA_USER_EMAIL"
+MIRROR="ACA_SANDBOX_GROUP ACA_SANDBOXGROUP_REGION ACA_REGION ACA_CONNECTOR_GATEWAY ACA_CONNECTOR_GATEWAY_REGION ACA_CONNECTOR_CONNECTION ACA_USER_EMAIL"
+# Defensive cleanup: if an earlier version of this sample mirrored
+# derived keys into the azd env, unset them now so they don't shadow
+# the ARM-resolved values at run-time.
+for stale in ACA_CONNECTOR_GATEWAY_PRINCIPAL_ID ACA_CONNECTOR_GATEWAY_TENANT_ID ACA_CONNECTOR_CONNECTION_RUNTIME_URL ACA_SANDBOX_GROUP_PRINCIPAL_ID; do
+    azd env set "$stale" "" >/dev/null 2>&1 || true
+done
 while IFS= read -r line; do
     case "$line" in
         ''|\#*) continue ;;

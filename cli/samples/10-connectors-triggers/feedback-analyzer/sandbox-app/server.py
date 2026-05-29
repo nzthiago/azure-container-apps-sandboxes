@@ -249,6 +249,30 @@ def _send_reply(to_addr: str, original_subject: str, original_from: str,
         "IsHtml": True,
     }
     status, raw = _post_json(f"{RUNTIME_URL}/v2/Mail", payload, headers={})
+    if status == 401:
+        # 401 missing-authorization-header from the platform proxy means
+        # the sandbox's outbound call wasn't intercepted by the
+        # gateway-connections middleware (which would otherwise inject
+        # Authorization: Bearer <SG-MI-token>). The single most common
+        # cause is a stale runtime URL on the sandbox group's
+        # gatewayConnections[] entry — typically because the connection
+        # was re-created since the SG was wired. This sandbox can't fix
+        # that itself; the operator has to re-run scenario setup from
+        # the host. Log loudly so the cause is obvious in the listener
+        # log, then surface the original error to the caller.
+        sys.stderr.write(
+            "[error] SendMailV2 returned 401 missing-authorization-header.\n"
+            "[error] This sandbox's gatewayConnections wiring is not delivering\n"
+            "[error] a Bearer token on outbound calls to the runtime URL.\n"
+            "[error] Most likely the connection was re-created since the\n"
+            "[error] sandbox group was wired, and the SG-level\n"
+            "[error] gatewayConnections[] entry now points at a stale\n"
+            "[error] connectionRuntimeUrl. Stop this listener (Enter in the\n"
+            "[error] host run.sh / run.py) and re-run feedback-analyzer; its\n"
+            "[error] preflight + setup will repair the wiring before the next\n"
+            "[error] sandbox boots.\n"
+        )
+        sys.stderr.flush()
     if status not in (200, 202):
         raise RuntimeError(f"SendMailV2 HTTP {status}: {raw[:300]!r}")
 

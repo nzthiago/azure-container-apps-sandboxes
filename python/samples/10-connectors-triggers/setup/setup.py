@@ -65,6 +65,12 @@ import time
 import webbrowser
 from pathlib import Path
 
+# Local shared helpers (ACL repair, ARM re-resolution, preflight,
+# deprecated-keys sweep). These also back run.py so the rules live in
+# exactly one place. See ./connector_common.py for the full rationale.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import connector_common as cc  # noqa: E402
+
 API_VERSION = "2026-05-01-preview"
 # Sandbox-group ARM resource uses a different (older) API version that
 # expresses ``properties.gatewayConnections[]``.
@@ -815,18 +821,20 @@ def main() -> None:
         print(f"    connection status: {status}")
 
     print("==> Granting gateway MI access policy on its own connection...")
-    _ensure_access_policy(
+    cc.ensure_acl_current(
         subscription_id, resource_group, gateway, conn, region,
-        principal_id, tenant_id, name="gateway-acl",
+        name="gateway-acl",
+        principal_id=principal_id, tenant_id=tenant_id,
     )
 
     print(f"==> Ensuring sandbox-group '{sandbox_group_name}' has SystemAssigned identity...")
     sg_principal_id = _ensure_sandbox_group_identity(resource_group, sandbox_group_name)
 
     print("==> Granting sandbox-group MI access policy on the same connection (send-side)...")
-    _ensure_access_policy(
+    cc.ensure_acl_current(
         subscription_id, resource_group, gateway, conn, region,
-        sg_principal_id, tenant_id, name="sandbox-acl",
+        name="sandbox-acl",
+        principal_id=sg_principal_id, tenant_id=tenant_id,
     )
 
     print("==> Resolving connection runtime URL...")
@@ -853,20 +861,41 @@ def main() -> None:
     )
 
     print(f"==> Writing {ENV_FILE}...")
+    # Strip deprecated derived keys from any pre-existing .env so users
+    # updating from older versions don't carry stale values forward.
+    # Derived values (runtime URL, gateway/SG MI principalIds) are now
+    # re-resolved from ARM by feedback-analyzer/run.py on every run.
+    cc.strip_deprecated_env_keys(ENV_FILE)
     env_to_write = {
         "ACA_SANDBOX_GROUP": sandbox_group_name,
         "ACA_SANDBOXGROUP_REGION": sandbox_group_location,
         "ACA_CONNECTOR_GATEWAY": gateway,
         "ACA_CONNECTOR_GATEWAY_REGION": region,
         "ACA_CONNECTOR_CONNECTION": conn,
-        "ACA_CONNECTOR_GATEWAY_PRINCIPAL_ID": principal_id,
-        "ACA_CONNECTOR_GATEWAY_TENANT_ID": tenant_id,
-        "ACA_CONNECTOR_CONNECTION_RUNTIME_URL": runtime_url,
-        "ACA_SANDBOX_GROUP_PRINCIPAL_ID": sg_principal_id,
     }
     if user_email:
         env_to_write["ACA_USER_EMAIL"] = user_email
     _write_env_file(env_to_write)
+
+    # ----- Self-test preflight -------------------------------------------
+    # Don't declare success on a broken state. Re-resolve everything we
+    # just wrote and assert wiring is correct end-to-end. If a check
+    # fails here, run.py would silently 401 — much better to surface it
+    # now while OAuth consent / ARM context is fresh.
+    print("==> Self-test preflight: re-resolving from ARM and validating wiring...")
+    state = cc.resolve_all(
+        subscription_id, resource_group, gateway, conn, sandbox_group_name,
+    )
+    errors = cc.preflight(
+        subscription_id, resource_group, gateway, conn, state,
+    )
+    if errors:
+        sys.exit(
+            "error: self-test preflight failed (see ✗ items above).\n"
+            "       Setup left the gateway in an inconsistent state. Try re-running setup;\n"
+            "       if it persists, run 'azd down --purge' then 'azd up' for a clean rebuild."
+        )
+    print("    self-test passed.")
 
     print("==> Done.")
     print()

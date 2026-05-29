@@ -83,6 +83,36 @@ office365 connection and trigger configs) and to detach the entry
 from the sandbox group's `gatewayConnections[]`, before azd deletes
 the resource group.
 
+## Drift recovery
+
+If `feedback-analyzer/run.sh` (or `run.cmd`) ever exits with
+`error: preflight detected drift`, the connector wiring has gone out
+of sync — typically because the connection, gateway, or sandbox group
+was re-created since setup last ran. Each `✗` line tells you what
+drifted and how to repair it; the headline fix is almost always:
+
+```
+bash setup/setup.sh
+```
+
+This re-runs the OAuth consent check, repairs stale ACLs in place
+(replacing any pointing at an old MI), and re-PATCHes the sandbox
+group's `gatewayConnections[]` with the current `connectionRuntimeUrl`.
+It is fast (~10–20 s, no resource recreation) and idempotent.
+
+If setup itself fails, recover with a full rebuild:
+
+```
+azd down --purge
+azd up
+```
+
+The `run.sh` script re-resolves the gateway MI, connection runtime URL,
+and sandbox group MI from ARM on every invocation rather than caching
+them in `.env`, so once setup has fixed the wiring you can `run.sh`
+again without any further changes. The `.env` only ever holds stable
+identifiers (subscription, resource group, gateway name, connection name).
+
 ## Sub-scenarios
 
 | Folder | What it shows |

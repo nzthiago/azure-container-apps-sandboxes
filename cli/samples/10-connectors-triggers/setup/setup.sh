@@ -53,6 +53,13 @@ API_VERSION="2026-05-01-preview"
 SANDBOXGROUP_API_VERSION="2026-02-01-preview"
 CONNECTOR_NAME="office365"
 
+# Source shared helpers for ARM re-resolution + preflight drift checks.
+# (These live in connector_common.sh so run.sh can use the same code and
+# we don't end up with two stale copies of the wiring rules.)
+_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=./connector_common.sh
+. "$_SCRIPT_DIR/connector_common.sh"
+
 : "${ACA_CONNECTOR_GATEWAY:=ai-apps-samples-gw}"
 # ACA_CONNECTOR_GATEWAY_REGION defaults to the sandbox-group region after the
 # .env file is sourced below.
@@ -467,33 +474,14 @@ EOF
 fi
 
 # ----- 4. Access policy: gateway MI -> connection ------------------------
-ensure_acl() {
-    # ensure_acl <policy_name> <principal_id>
-    local _name="$1"
-    local _principal="$2"
-    local _body_file
-    _body_file="$(mktmp)"
-    cat > "$_body_file" <<EOF
-{"location":"$REGION","properties":{"principal":{"type":"ActiveDirectory","identity":{"objectId":"$_principal","tenantId":"$TENANT_ID"}}}}
-EOF
-    local _err
-    if _err="$(az_rest_retry \
-        --method PUT \
-        --url "$GW_URL_BASE/connections/$CONN/accessPolicies/$_name?api-version=$API_VERSION" \
-        --headers "Content-Type=application/json" \
-        --body "@$(_body_path "$_body_file")" 2>&1 >/dev/null)"; then
-        echo "    access policy '$_name' applied"
-    elif [[ "$_err" == *Exists* || "$_err" == *Conflict* ]]; then
-        echo "    access policy '$_name' already exists (skipping)"
-    else
-        echo "error: access-policy '$_name' PUT failed:" >&2
-        echo "$_err" >&2
-        exit 1
-    fi
-}
-
+# cc_ensure_acl_current (from connector_common.sh) REPAIRS stale ACLs:
+# - GETs the policy and short-circuits if its objectId already matches
+# - If a stale objectId is recorded, DELETEs and PUTs fresh
+# This prevents the silent-401 footgun where the gateway/SG MI was
+# rotated (e.g. by recreating the resource via azd) but the connection
+# still holds the old principalId in its accessPolicies.
 echo "==> Granting gateway MI access policy on its own connection..."
-ensure_acl "gateway-acl" "$PRINCIPAL_ID"
+cc_ensure_acl_current "gateway-acl" "$PRINCIPAL_ID" "$TENANT_ID" "$REGION"
 
 # ----- 4b. Sandbox-group SystemAssigned MI + send-side access policy -----
 if ! command -v aca >/dev/null 2>&1; then
@@ -611,7 +599,15 @@ az_rest_retry --method PATCH --url "$SG_URL" --headers "Content-Type=application
 echo "    sandbox-group gatewayConnections[] now references '$CONN'"
 
 # ----- 5. Write .env ----------------------------------------------------
+# Note: we DO NOT cache derived values (runtime URL, gateway MI
+# principalId, SG MI principalId) into .env. They drift the moment the
+# connection / gateway / SG is recreated, causing silent 401 failures at
+# run.sh time. run.sh re-resolves them from ARM on every invocation
+# (~2s) via connector_common.sh. Setup strips deprecated keys from any
+# pre-existing .env so users updating from older versions don't carry
+# stale values forward.
 echo "==> Writing $ENV_FILE..."
+cc_strip_env_keys "$ENV_FILE"
 declare -A EXISTING
 while IFS='=' read -r k v; do
     k="${k//$'\r'/}"
@@ -624,10 +620,6 @@ EXISTING[ACA_SANDBOXGROUP_REGION]="$ACA_SANDBOXGROUP_REGION"
 EXISTING[ACA_CONNECTOR_GATEWAY]="$GW"
 EXISTING[ACA_CONNECTOR_GATEWAY_REGION]="$REGION"
 EXISTING[ACA_CONNECTOR_CONNECTION]="$CONN"
-EXISTING[ACA_CONNECTOR_GATEWAY_PRINCIPAL_ID]="$PRINCIPAL_ID"
-EXISTING[ACA_CONNECTOR_GATEWAY_TENANT_ID]="$TENANT_ID"
-EXISTING[ACA_CONNECTOR_CONNECTION_RUNTIME_URL]="$RUNTIME_URL"
-EXISTING[ACA_SANDBOX_GROUP_PRINCIPAL_ID]="$SG_PRINCIPAL_ID"
 if [[ -n "${ACA_USER_EMAIL:-}" ]]; then
     EXISTING[ACA_USER_EMAIL]="$ACA_USER_EMAIL"
 fi
@@ -635,12 +627,33 @@ fi
 {
     echo "# Updated by cli/samples/10-connectors-triggers/setup/setup.sh"
     echo "# Re-run scenario setup to update."
+    echo "# Derived values (runtime URL, gateway/SG MI principalIds) are"
+    echo "# re-resolved from ARM on each run by feedback-analyzer/run.sh."
     echo ""
     for k in $(printf '%s\n' "${!EXISTING[@]}" | sort); do
         echo "$k=${EXISTING[$k]}"
     done
 } > "$ENV_FILE"
 echo "    wrote $ENV_FILE"
+
+# ----- 6. Self-test preflight -------------------------------------------
+# Don't declare success on a broken state. Re-resolve everything we just
+# wrote and assert wiring is correct end-to-end. If a check fails here,
+# users running run.sh would silently 401 — much better to surface it now
+# while OAuth consent / ARM context is fresh.
+echo "==> Self-test preflight: re-resolving from ARM and validating wiring..."
+if ! cc_resolve_all; then
+    echo "error: self-test preflight could not resolve ARM state. The wiring may have failed mid-setup." >&2
+    exit 1
+fi
+cc_preflight
+if cc_preflight_failed; then
+    echo "error: self-test preflight failed (see ✗ items above)." >&2
+    echo "       Setup left the gateway in an inconsistent state. Try re-running setup;" >&2
+    echo "       if it persists, run 'azd down --purge' then 'azd up' for a clean rebuild." >&2
+    exit 1
+fi
+echo "    self-test passed."
 
 echo "==> Done."
 echo "    Next:"

@@ -173,21 +173,32 @@ if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
 if ($LASTEXITCODE -ne 0) { throw "setup.py failed (exit=$LASTEXITCODE)" }
 
 # ----- Mirror .env -> azd env so 'azd env get-values' is rich -------------
+# Note: derived values (runtime URL, gateway/SG MI principalIds) are
+# DELIBERATELY excluded — they're re-resolved from ARM on every run.py
+# invocation. Mirroring them into azd env would let them go stale and
+# silently break run.py whenever the connection/gateway/SG is recreated.
 Write-Host ""
 Write-Host "==> Mirroring connector keys into azd env..."
 $mirror = @(
     "ACA_SANDBOX_GROUP",
-    "ACA_SANDBOX_GROUP_PRINCIPAL_ID",
     "ACA_SANDBOXGROUP_REGION",
     "ACA_REGION",
     "ACA_CONNECTOR_GATEWAY",
     "ACA_CONNECTOR_GATEWAY_REGION",
-    "ACA_CONNECTOR_GATEWAY_PRINCIPAL_ID",
-    "ACA_CONNECTOR_GATEWAY_TENANT_ID",
     "ACA_CONNECTOR_CONNECTION",
-    "ACA_CONNECTOR_CONNECTION_RUNTIME_URL",
     "ACA_USER_EMAIL"
 )
+# Defensive cleanup: unset any stale derived keys left behind by an
+# earlier version of this sample so they don't shadow the ARM-resolved
+# values at run-time.
+foreach ($stale in @(
+    "ACA_CONNECTOR_GATEWAY_PRINCIPAL_ID",
+    "ACA_CONNECTOR_GATEWAY_TENANT_ID",
+    "ACA_CONNECTOR_CONNECTION_RUNTIME_URL",
+    "ACA_SANDBOX_GROUP_PRINCIPAL_ID"
+)) {
+    & azd env set $stale "" 2>$null | Out-Null
+}
 foreach ($line in (Get-Content $envFile)) {
     if ($line -match "^\s*#" -or $line -notmatch "=") { continue }
     $kv = $line -split "=", 2

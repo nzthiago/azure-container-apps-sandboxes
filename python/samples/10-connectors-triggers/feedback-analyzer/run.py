@@ -96,6 +96,15 @@ from azure.containerapps.sandbox import (
     endpoint_for_region,
 )
 
+# Shared helpers (ARM re-resolution + preflight drift checks). Live in
+# the setup tree so setup.py and run.py use the SAME code — there's no
+# second copy in run.py to drift from setup.py. See
+# ../setup/connector_common.py for the full rationale.
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent.parent / "setup"),
+)
+import connector_common as cc  # noqa: E402
+
 API_VERSION = "2026-05-01-preview"
 DATAPLANE_API_VERSION = "2026-02-01-preview"
 # Token audience for the sandbox data plane (matches the SDK's
@@ -128,8 +137,6 @@ REQUIRED_ENV = (
     "AZURE_SUBSCRIPTION_ID", "ACA_RESOURCE_GROUP", "ACA_SANDBOX_GROUP",
     "ACA_SANDBOXGROUP_REGION",
     "ACA_CONNECTOR_GATEWAY", "ACA_CONNECTOR_CONNECTION",
-    "ACA_CONNECTOR_GATEWAY_PRINCIPAL_ID",
-    "ACA_CONNECTOR_CONNECTION_RUNTIME_URL",
 )
 
 
@@ -392,11 +399,15 @@ def _create_sandbox_with_gateway_connection(
     """PUT a sandbox via the regional dataplane with a ``gatewayConnections[]``
     entry referencing the Office 365 connection. Returns the assigned id.
 
-    The per-sandbox entry mirrors the SG-level entry shape
-    (``resourceId`` + ``connectionRuntimeUrl`` +
-    ``authentication.type=SystemAssignedManagedIdentity``) so the
-    platform's connector-gateway-aware proxy injects Bearer auth
-    automatically on outbound calls to the runtime URL host.
+    The per-sandbox entry contains ONLY ``{"resourceId": ...}`` — the full
+    details (``connectionRuntimeUrl`` + ``authentication.type``) live on the
+    SG-level ``gatewayConnections[]`` entry and are looked up by resourceId
+    at runtime. With this and the SG-level entry in place, the platform's
+    connector-gateway-aware proxy injects Bearer auth automatically on
+    outbound calls to the runtime URL host.
+
+    ``runtime_url`` is accepted for forward-compat but not sent on the
+    per-sandbox PUT (the platform resolves it from the SG entry).
 
     The published ``azure-containerapps-sandbox`` Python SDK does not yet
     expose ``gateway_connections`` on ``begin_create_sandbox``; we hit the
@@ -407,15 +418,12 @@ def _create_sandbox_with_gateway_connection(
     api-version, no apiVersion param — the server assigns the id and
     returns it in the response body.
     """
+    del runtime_url  # kept in signature for backward compat with callers
     body: dict = {
         "sourcesRef": {"diskImage": {"name": disk, "isPublic": True}},
         "vmmType": "CloudHypervisor",
         "resources": {"cpu": cpu, "memory": memory, "disk": "20480Mi"},
-        "gatewayConnections": [{
-            "resourceId": connection_resource_id,
-            "connectionRuntimeUrl": runtime_url,
-            "authentication": {"type": "SystemAssignedManagedIdentity"},
-        }],
+        "gatewayConnections": [{"resourceId": connection_resource_id}],
     }
     if labels:
         body["labels"] = labels
@@ -530,12 +538,8 @@ def main() -> int:
     sub = os.environ["AZURE_SUBSCRIPTION_ID"]
     rg = os.environ["ACA_RESOURCE_GROUP"]
     sg = os.environ["ACA_SANDBOX_GROUP"]
-    region = os.environ["ACA_SANDBOXGROUP_REGION"]
     gw = os.environ["ACA_CONNECTOR_GATEWAY"]
     conn = os.environ["ACA_CONNECTOR_CONNECTION"]
-    gw_principal = os.environ["ACA_CONNECTOR_GATEWAY_PRINCIPAL_ID"]
-    gw_tenant = os.environ.get("ACA_CONNECTOR_GATEWAY_TENANT_ID", "").strip()
-    runtime_url = os.environ["ACA_CONNECTOR_CONNECTION_RUNTIME_URL"].rstrip("/")
     user_email = os.environ.get("ACA_USER_EMAIL", "").strip()
     triage_to = (
         os.environ.get("TRIAGE_RECIPIENT", "").strip() or user_email
@@ -546,20 +550,46 @@ def main() -> int:
             "       Set one of them in .env."
         )
 
-    runtime_host = urllib.parse.urlparse(runtime_url).hostname or ""
-    if not runtime_host:
+    # Re-resolve gateway MI, connection runtime URL, and SG MI from ARM on
+    # every run, then preflight the wiring. This is the drift-prevention
+    # core: the previous implementation read these from .env, but they go
+    # stale silently every time the connection/gateway/SG is recreated,
+    # producing 401 missing-authorization-header from the platform proxy
+    # with no obvious clue why. See ../setup/connector_common.py for the
+    # full check list.
+    print("==> Re-resolving gateway / connection / sandbox group from ARM...")
+    state = cc.resolve_all(sub, rg, gw, conn, sg)
+
+    print("==> Preflight: validating wiring is in a state that injects auth...")
+    errors = cc.preflight(sub, rg, gw, conn, state)
+    if errors:
         sys.exit(
-            f"error: could not parse host from ACA_CONNECTOR_CONNECTION_RUNTIME_URL={runtime_url!r}"
+            "\n"
+            "error: preflight detected drift between the connection, ACLs, and the sandbox\n"
+            "       group's gatewayConnections[]. Fix the items marked ✗ above by running:\n"
+            "\n"
+            "         python ../setup/setup.py        # fast: repairs ACLs + re-PATCH SG\n"
+            "         # OR (heavier, if setup itself is broken):\n"
+            "         azd down --purge && azd up      # full rebuild from scratch\n"
         )
+    print("    preflight passed.")
 
-    connection_resource_id = (
-        f"/subscriptions/{sub}/resourceGroups/{rg}"
-        f"/providers/Microsoft.Web/connectorGateways/{gw}/connections/{conn}"
-    )
+    # Derived values now come from ARM (cc.resolve_all populates these).
+    gw_principal = state.gw_principal_id
+    gw_tenant = state.gw_tenant_id
+    runtime_url = state.runtime_url
+    runtime_host = state.runtime_host
+    # Use the sandbox group's actual location (from ARM) for the dataplane
+    # endpoint — the .env value is only a default-at-creation-time and may
+    # not match where the SG actually got placed.
+    region = state.sg_region or os.environ.get("ACA_SANDBOXGROUP_REGION", "")
+    if not region:
+        sys.exit("error: sandbox group has no location and no ACA_SANDBOXGROUP_REGION in .env.")
 
-    # Resolve the GitHub token BEFORE provisioning anything — fail fast
-    # if the operator has no token configured, rather than spinning up
-    # a sandbox just to tear it down again.
+    connection_resource_id = state.conn_resource_id
+
+    # Resolve the GitHub token AFTER preflight — fail fast on drift rather
+    # than prompting for a token, then bailing out anyway.
     print("==> Resolving GitHub token for Copilot CLI...")
     copilot_token = _resolve_copilot_token()
 
