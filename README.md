@@ -54,12 +54,13 @@ documentation and how to override defaults.
 
 ### Labs — guided Jupyter notebooks (Python SDK)
 
-Interactive, run-all notebooks that walk the full sandbox surface step-by-step:
+Step-through notebooks that run the Python SDK end-to-end. Open in VS Code and **Run All**, or step cell by cell to inspect each output.
 
-| # | Lab | What it covers |
+| # | Lab | What it shows |
 |---|---|---|
-| 01 | [Getting Started](python/labs/01-getting-started.ipynb) | End-to-end lifecycle: create a sandbox group → sandbox → exec → files → ports → snapshots → disks → volumes → lifecycle policies → egress rules → secrets → cleanup |
-| 02 | [Bring Your Own Container](python/labs/02-bring-your-own-container.ipynb) | Build and run custom container images as sandbox disk images |
+| 01 | [getting-started](python/labs/01-getting-started.ipynb) | Full surface end-to-end: create group → sandbox from disk → exec → files → ports → egress → lifecycle → cleanup |
+| 02 | [bring-your-own-container](python/labs/02-bring-your-own-container.ipynb) | Build a sandbox from your own container image and open a port to access its web content |
+| 03 | [sandbox-inception](python/labs/03-sandbox-inception.ipynb) | Run the SDK **inside** a sandbox to spawn and manage child sandboxes using the group's managed identity — no secrets |
 
 ### Scenarios — composed use cases (with production tips)
 
