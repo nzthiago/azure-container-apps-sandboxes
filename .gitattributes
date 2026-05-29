@@ -1,0 +1,23 @@
+# Default: let Git auto-detect text vs. binary.
+* text=auto
+
+# Shell scripts MUST be LF on disk on every OS. Windows bash/git-bash
+# chokes on CRLF with: "$'\r': command not found" / "set: pipefail:
+# invalid option name". This applies to all shell flavors.
+*.sh    text eol=lf
+*.bash  text eol=lf
+
+# Other text formats where LF is the cross-platform norm.
+*.py     text eol=lf
+*.bicep  text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.json   text eol=lf
+*.md     text eol=lf
+
+# Windows-only scripts stay CRLF.
+*.ps1    text eol=crlf
+*.psm1   text eol=crlf
+*.psd1   text eol=crlf
+*.bat    text eol=crlf
+*.cmd    text eol=crlf

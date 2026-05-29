@@ -1,0 +1,62 @@
+name: connectors-triggers
+metadata:
+  template: connectors-triggers@1.0.0
+
+# 'azd up' for this sample is a thin wrapper around the existing
+# imperative setup:
+#   1. main.bicep creates ONLY the resource group (everything else uses
+#      preview API versions for which Bicep types are not yet published).
+#      The bicep + parameters file are shared with the CLI flavor of this
+#      sample — see 'infra.path' below.
+#   2. The 'postprovision' hook delegates to setup/setup.py — the same
+#      script the README documents — which:
+#        * creates the connector gateway + MI
+#        * creates the office365 connection
+#        * walks you through OAuth consent (opens a browser, waits for Enter)
+#        * grants both access policies (gateway-acl, sandbox-acl)
+#        * fetches the connection runtime URL
+#        * wires the connection onto the sandbox group
+#        * writes everything into .env so the per-run scripts work
+#
+# The sandbox group is named via ACA_SANDBOX_GROUP (default
+# 'ai-apps-samples-group') and is auto-created in the resource group
+# if it doesn't already exist.
+#
+# Per-run sandbox / trigger lifecycle is NOT part of 'azd up' — those are
+# intentionally ephemeral. After 'azd up', run:
+#   cd feedback-analyzer && pip install -r requirements.txt && python run.py
+#
+# 'azd down' first runs the 'predown' hook (setup/teardown.py) to
+# delete the connector gateway + connections + sandbox-group wiring
+# while those resources are still resolvable, then deletes the
+# resource group (and anything else in it).
+
+# The bicep template (resource group only) is shared with the CLI flavor
+# of this sample to avoid duplication; the hook below is python-specific.
+infra:
+  path: ../../../cli/samples/10-connectors-triggers/infra
+  module: main
+
+hooks:
+  postprovision:
+    posix:
+      shell: sh
+      run: infra/hooks/postprovision.sh
+      continueOnError: false
+      interactive: true
+    windows:
+      shell: pwsh
+      run: infra/hooks/postprovision.ps1
+      continueOnError: false
+      interactive: true
+  predown:
+    posix:
+      shell: sh
+      run: infra/hooks/predown.sh
+      continueOnError: true
+      interactive: true
+    windows:
+      shell: pwsh
+      run: infra/hooks/predown.ps1
+      continueOnError: true
+      interactive: true
