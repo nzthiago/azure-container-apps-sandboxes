@@ -153,8 +153,11 @@ cc_resolve_all() {
     fi
 
     # Parse all three blobs in one Python call to keep latency down.
+    # `tr -d '\r'` strips the CR that Windows Python text-mode stdout
+    # appends to every '\n' (translating '\n' to '\r\n'). Without it, the
+    # value captured here ends with '\r' and downstream comparisons fail.
     local parsed
-    parsed="$("$py" - <<'PYEOF' "$gw_json" "$conn_json" "$sg_json" "$CC_CONN_RESOURCE_ID"
+    parsed="$("$py" - <<'PYEOF' "$gw_json" "$conn_json" "$sg_json" "$CC_CONN_RESOURCE_ID" | tr -d '\r'
 import json, sys, urllib.parse
 gw, conn, sg, rid = json.loads(sys.argv[1] or "{}"), json.loads(sys.argv[2] or "{}"), json.loads(sys.argv[3] or "{}"), sys.argv[4]
 def get(d, *path, default=""):
@@ -209,7 +212,7 @@ import json, sys
 d = json.loads(sys.stdin.read())
 for k in ('gw_principal','gw_tenant','gw_region','sg_principal','sg_tenant','sg_region','status','status_error','runtime_url','runtime_host'):
     print(d.get(k, ''))
-" <<<"$parsed")"
+" <<<"$parsed" | tr -d '\r')"
     {
         read -r CC_GW_PRINCIPAL_ID
         read -r CC_GW_TENANT_ID
@@ -222,7 +225,7 @@ for k in ('gw_principal','gw_tenant','gw_region','sg_principal','sg_tenant','sg_
         read -r CC_RUNTIME_URL
         read -r CC_RUNTIME_HOST
     } <<<"$scalars"
-    CC_SG_GATEWAY_CONNECTIONS_JSON="$("$py" -c 'import json,sys; print(json.dumps(json.loads(sys.stdin.read()).get("sg_gc", [])))' <<<"$parsed")"
+    CC_SG_GATEWAY_CONNECTIONS_JSON="$("$py" -c 'import json,sys; print(json.dumps(json.loads(sys.stdin.read()).get("sg_gc", [])))' <<<"$parsed" | tr -d '\r')"
 
     return 0
 }
@@ -282,7 +285,7 @@ cc_preflight() {
     acls_json="$(cc_az_rest_retry --method GET --url "$acls_url" 2>/dev/null || echo '{"value":[]}')"
 
     local acl_check
-    acl_check="$("$py" - <<'PYEOF' "$acls_json" "${CC_GW_PRINCIPAL_ID:-}" "${CC_SG_PRINCIPAL_ID:-}"
+    acl_check="$("$py" - <<'PYEOF' "$acls_json" "${CC_GW_PRINCIPAL_ID:-}" "${CC_SG_PRINCIPAL_ID:-}" | tr -d '\r'
 import json, sys
 acls = json.loads(sys.argv[1] or "{}").get("value", [])
 gw_expected, sg_expected = sys.argv[2], sys.argv[3]
@@ -298,11 +301,11 @@ print(json.dumps(out))
 PYEOF
 )"
     local gw_acl_obj sb_acl_obj gw_match sb_match acl_names
-    gw_acl_obj="$("$py" -c 'import json,sys; print(json.loads(sys.stdin.read()).get("gw_acl_obj",""))' <<<"$acl_check")"
-    sb_acl_obj="$("$py" -c 'import json,sys; print(json.loads(sys.stdin.read()).get("sb_acl_obj",""))' <<<"$acl_check")"
-    gw_match="$("$py" -c   'import json,sys; print("1" if json.loads(sys.stdin.read()).get("gw_match") else "0")' <<<"$acl_check")"
-    sb_match="$("$py" -c   'import json,sys; print("1" if json.loads(sys.stdin.read()).get("sb_match") else "0")' <<<"$acl_check")"
-    acl_names="$("$py" -c  'import json,sys; print(",".join(json.loads(sys.stdin.read()).get("names",[])))' <<<"$acl_check")"
+    gw_acl_obj="$("$py" -c 'import json,sys; print(json.loads(sys.stdin.read()).get("gw_acl_obj",""))' <<<"$acl_check" | tr -d '\r')"
+    sb_acl_obj="$("$py" -c 'import json,sys; print(json.loads(sys.stdin.read()).get("sb_acl_obj",""))' <<<"$acl_check" | tr -d '\r')"
+    gw_match="$("$py" -c   'import json,sys; print("1" if json.loads(sys.stdin.read()).get("gw_match") else "0")' <<<"$acl_check" | tr -d '\r')"
+    sb_match="$("$py" -c   'import json,sys; print("1" if json.loads(sys.stdin.read()).get("sb_match") else "0")' <<<"$acl_check" | tr -d '\r')"
+    acl_names="$("$py" -c  'import json,sys; print(",".join(json.loads(sys.stdin.read()).get("names",[])))' <<<"$acl_check" | tr -d '\r')"
 
     if [[ "$gw_match" != "1" ]]; then
         if [[ -z "$gw_acl_obj" ]]; then
@@ -331,7 +334,7 @@ PYEOF
     # have its connectionRuntimeUrl equal the connection's CURRENT runtime
     # URL AND have authentication.type == SystemAssignedManagedIdentity.
     local sg_check
-    sg_check="$("$py" - <<'PYEOF' "$CC_SG_GATEWAY_CONNECTIONS_JSON" "$CC_CONN_RESOURCE_ID" "${CC_RUNTIME_URL:-}"
+    sg_check="$("$py" - <<'PYEOF' "$CC_SG_GATEWAY_CONNECTIONS_JSON" "$CC_CONN_RESOURCE_ID" "${CC_RUNTIME_URL:-}" | tr -d '\r'
 import json, sys
 entries = json.loads(sys.argv[1] or "[]")
 rid_lower = sys.argv[2].lower()
@@ -353,11 +356,11 @@ print(json.dumps(out))
 PYEOF
 )"
     local sg_present sg_url_match sg_actual_url sg_auth_ok sg_auth_type
-    sg_present="$("$py"     -c 'import json,sys; print("1" if json.loads(sys.stdin.read()).get("present") else "0")' <<<"$sg_check")"
-    sg_url_match="$("$py"   -c 'import json,sys; print("1" if json.loads(sys.stdin.read()).get("url_match") else "0")' <<<"$sg_check")"
-    sg_actual_url="$("$py"  -c 'import json,sys; print(json.loads(sys.stdin.read()).get("actual_url",""))' <<<"$sg_check")"
-    sg_auth_ok="$("$py"     -c 'import json,sys; print("1" if json.loads(sys.stdin.read()).get("auth_ok") else "0")' <<<"$sg_check")"
-    sg_auth_type="$("$py"   -c 'import json,sys; print(json.loads(sys.stdin.read()).get("auth_type",""))' <<<"$sg_check")"
+    sg_present="$("$py"     -c 'import json,sys; print("1" if json.loads(sys.stdin.read()).get("present") else "0")' <<<"$sg_check" | tr -d '\r')"
+    sg_url_match="$("$py"   -c 'import json,sys; print("1" if json.loads(sys.stdin.read()).get("url_match") else "0")' <<<"$sg_check" | tr -d '\r')"
+    sg_actual_url="$("$py"  -c 'import json,sys; print(json.loads(sys.stdin.read()).get("actual_url",""))' <<<"$sg_check" | tr -d '\r')"
+    sg_auth_ok="$("$py"     -c 'import json,sys; print("1" if json.loads(sys.stdin.read()).get("auth_ok") else "0")' <<<"$sg_check" | tr -d '\r')"
+    sg_auth_type="$("$py"   -c 'import json,sys; print(json.loads(sys.stdin.read()).get("auth_type",""))' <<<"$sg_check" | tr -d '\r')"
 
     if [[ "$sg_present" != "1" ]]; then
         echo "$fail sandbox group '$ACA_SANDBOX_GROUP' has no gatewayConnections[] entry for this connection." >&2
@@ -395,9 +398,14 @@ cc_preflight_failed() {
 # Usage: cc_ensure_acl_current <acl_name> <principal_id> <tenant_id> <region>
 cc_ensure_acl_current() {
     local _name="$1" _principal="$2" _tenant="$3" _region="$4"
+    # Strip CRs from caller-supplied principal (it came from `az rest -o tsv`
+    # on Windows which emits \r\n line endings).
+    _principal="${_principal%$'\r'}"
+    _tenant="${_tenant%$'\r'}"
+    _region="${_region%$'\r'}"
     local acl_url="https://management.azure.com/subscriptions/$SUB/resourceGroups/$ACA_RESOURCE_GROUP/providers/Microsoft.Web/connectorGateways/$ACA_CONNECTOR_GATEWAY/connections/$ACA_CONNECTOR_CONNECTION/accessPolicies/$_name?api-version=$CC_API_VERSION"
     local current
-    current="$(cc_az_rest_retry --method GET --url "$acl_url" --query "properties.principal.identity.objectId" -o tsv 2>/dev/null || true)"
+    current="$(cc_az_rest_retry --method GET --url "$acl_url" --query "properties.principal.identity.objectId" -o tsv 2>/dev/null | tr -d '\r' || true)"
     if [[ -n "$current" && "${current,,}" == "${_principal,,}" ]]; then
         echo "    access policy '$_name' already current (objectId=$current)" >&2
         return 0
