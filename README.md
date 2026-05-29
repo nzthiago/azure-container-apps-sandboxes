@@ -47,8 +47,10 @@ pip install -r requirements.txt
 python sandboxes.py
 ```
 
-See [`setup/README.md`](setup/README.md) for the full setup
-documentation and how to override defaults.
+## Reference
+
+- [Python SDK README](https://github.com/microsoft/azure-container-apps/blob/main/docs/early/python-sdk/README.md)
+- [ACA CLI README](https://github.com/microsoft/azure-container-apps/blob/main/docs/early/aca-cli/README.md)
 
 ## Samples
 
@@ -78,7 +80,3 @@ Step-through notebooks that run the Python SDK end-to-end. Open in VS Code and *
 | 10 | connectors-email-triage | **Connector Namespaces + ACA Sandbox**: Outlook `When a new email arrives (V3)` trigger → ACA receiver → per-email sandbox → GitHub Copilot CLI → Teams MCP (Work IQ) posts a triage card. End-to-end `azd up`, deny-default egress + Transform-rule API-key stamping. | [Python](python/samples/10-connectors-email-triage) | - |
 | 11 | connectors-document-automation | **ACA Sandbox as direct webhook target** for a Connector Namespaces SharePoint trigger. No receiver, no Function host. Sandbox runs FastAPI on :8080, Copilot CLI uses Work IQ SharePoint MCP + `pdftotext`/`tesseract` to extract invoice data and upload results back to SharePoint. End-to-end `azd up`. | [Python](python/samples/11-connectors-document-automation) | - |
 
-## Reference
-
-- [Python SDK README](https://github.com/microsoft/azure-container-apps/blob/main/docs/early/python-sdk/README.md)
-- [ACA CLI README](https://github.com/microsoft/azure-container-apps/blob/main/docs/early/aca-cli/README.md)
