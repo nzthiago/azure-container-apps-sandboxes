@@ -243,31 +243,20 @@ def _wait_in_sandbox(sandbox, url, timeout=60, log_path=None, pid_path=None):
     )
 
 
-def _smoke_test_gateway_auth_injection(sandbox, runtime_url, timeout=90):
-    """End-to-end check that the gateway-connection auth-injection chain works.
+def _smoke_test_egress(sandbox, runtime_url, timeout=90):
+    """GET ``{runtime_url}/v2/Mail?folderPath=Inbox&top=1`` from inside the
+    sandbox until we see HTTP 200. Retries because ACL propagation can lag
+    ~30-60s after the ACL PUT in setup.
 
-    From INSIDE the sandbox, GET ``{runtime_url}/v2/Mail?folderPath=Inbox&top=1``
-    with NO Authorization header. The platform's gatewayConnections-aware
-    egress layer is supposed to:
-      1. Detect that the destination host matches a sandbox
-         ``gatewayConnections[]`` entry.
-      2. Look up the SG-level entry by ``resourceId`` to get the auth
-         type (SystemAssignedManagedIdentity).
-      3. Fetch a Bearer token via the sandbox-group MI (the connection's
-         send-side access policy lets it).
-      4. Inject ``Authorization: Bearer ...`` and forward to Office 365.
-
-    A 200 here proves the wiring landed correctly on BOTH the SG and the
-    sandbox. A non-200 (typically 401) means the platform did NOT inject
-    auth — usually because ``gatewayConnections[]`` is missing or stale
-    in one of those two places (the post-PUT verification in
-    ``_create_sandbox_with_gateway_connection`` and the preflight in
-    ``setup.py``/``connector_common.preflight()`` should catch most cases
-    pre-flight; this is the final live confirmation).
-
-    It does NOT prove ``SendMailV2`` succeeds — that depends on Mail.Send
-    permission on the connection, the recipient address, and the payload.
-    Retries because ACL propagation can lag ~30-60s after the ACL PUT."""
+    Limited-scope reachability + auth-injection check, NOT a full
+    ``SendMailV2`` validation. A 200 here proves the platform proxy can
+    reach the runtime URL and inject a working Bearer token (i.e. the
+    declarative ``gatewayConnections[]`` wiring is in place). It does
+    NOT prove ``SendMailV2`` succeeds — that depends on additional
+    permissions (Mail.Send), the recipient address, and the payload.
+    The point is to fail fast on the common misconfigurations (no SG
+    MI, no SG ``gatewayConnections[]`` entry, no per-sandbox
+    ``gatewayConnections``) before letting the trigger fire."""
     test_url = f"{runtime_url}/v2/Mail?folderPath=Inbox&top=1"
     cmd = (
         "curl -sS -o /dev/null -w '%{http_code}' "
@@ -282,22 +271,13 @@ def _smoke_test_gateway_auth_injection(sandbox, runtime_url, timeout=90):
             return
         time.sleep(5)
     raise RuntimeError(
-        f"gateway-connection auth-injection smoke test failed after {timeout}s "
-        f"(last http_code={last!r}). The platform proxy did NOT inject a Bearer "
-        "token on the call to the runtime URL. Wiring is broken in one of:\n"
-        "  (a) sandbox-acl missing/stale on the connection\n"
-        "      (preflight should have caught — re-run setup.py)\n"
-        "  (b) sandbox-group has no SystemAssigned MI or its\n"
-        "      gatewayConnections[] entry doesn't match this connection\n"
-        "      (preflight should have caught — re-run setup.py)\n"
-        "  (c) THIS sandbox was created without gatewayConnections[] in\n"
-        "      its spec (post-PUT verification above should have caught)\n"
-        "  (d) connection OAuth credential expired — re-run azd provision"
+        f"egress smoke test failed after {timeout}s (last http_code={last!r}).\n"
+        "Check: (a) sandbox-acl exists on the connection, (b) the sandbox\n"
+        "       group has a SystemAssigned MI and a gatewayConnections[]\n"
+        "       entry referencing this connection (set by setup.py), (c)\n"
+        "       this sandbox was created with the same connection in its\n"
+        "       gatewayConnections list (handled by this script)."
     )
-
-
-# Backward-compat alias (older callers / docs may reference the old name).
-_smoke_test_egress = _smoke_test_gateway_auth_injection
 
 
 # ---------- copilot CLI authentication --------------------------------------
@@ -419,12 +399,15 @@ def _create_sandbox_with_gateway_connection(
     """PUT a sandbox via the regional dataplane with a ``gatewayConnections[]``
     entry referencing the Office 365 connection. Returns the assigned id.
 
-    The per-sandbox entry mirrors the SG-level shape exactly —
-    ``{resourceId, connectionRuntimeUrl, authentication.type=SystemAssignedManagedIdentity}`` —
-    so the platform proxy has all the wiring it needs without a second
-    lookup. With this set on BOTH the SG and the sandbox at create-time,
-    the platform's connector-gateway-aware egress layer injects Bearer
-    auth automatically on every outbound call to the runtime URL host.
+    The per-sandbox entry contains ONLY ``{"resourceId": ...}`` — the full
+    details (``connectionRuntimeUrl`` + ``authentication.type``) live on the
+    SG-level ``gatewayConnections[]`` entry and are looked up by resourceId
+    at runtime. With this and the SG-level entry in place, the platform's
+    connector-gateway-aware proxy injects Bearer auth automatically on
+    outbound calls to the runtime URL host.
+
+    ``runtime_url`` is accepted for forward-compat but not sent on the
+    per-sandbox PUT (the platform resolves it from the SG entry).
 
     The published ``azure-containerapps-sandbox`` Python SDK does not yet
     expose ``gateway_connections`` on ``begin_create_sandbox``; we hit the
@@ -434,27 +417,18 @@ def _create_sandbox_with_gateway_connection(
     Cascade's URL shape (verified live): no sandbox id in URL, no
     api-version, no apiVersion param — the server assigns the id and
     returns it in the response body.
-
-    Post-PUT we read the sandbox back and assert the wiring landed.
-    The dataplane MAY silently drop unknown fields (e.g., if it was
-    provisioned on an API version that doesn't recognise
-    ``gatewayConnections``), which would surface later as an opaque 401
-    on the runtime URL smoke test — easier to debug here.
     """
+    del runtime_url  # kept in signature for backward compat with callers
     body: dict = {
         "sourcesRef": {"diskImage": {"name": disk, "isPublic": True}},
         "vmmType": "CloudHypervisor",
         "resources": {"cpu": cpu, "memory": memory, "disk": "20480Mi"},
-        "gatewayConnections": [{
-            "resourceId": connection_resource_id,
-            "connectionRuntimeUrl": runtime_url,
-            "authentication": {"type": "SystemAssignedManagedIdentity"},
-        }],
+        "gatewayConnections": [{"resourceId": connection_resource_id}],
     }
     if labels:
         body["labels"] = labels
-    base = f"{endpoint}/subscriptions/{sub}/resourceGroups/{rg}/sandboxGroups/{sg}/sandboxes"
-    _, out, _ = _az_rest("PUT", base, body=body, resource=DATAPLANE_RESOURCE)
+    url = f"{endpoint}/subscriptions/{sub}/resourceGroups/{rg}/sandboxGroups/{sg}/sandboxes"
+    _, out, _ = _az_rest("PUT", url, body=body, resource=DATAPLANE_RESOURCE)
     try:
         data = json.loads(out) if out else {}
     except json.JSONDecodeError:
@@ -466,33 +440,6 @@ def _create_sandbox_with_gateway_connection(
             sid = sid.rsplit("/", 1)[-1]
     if not sid:
         raise RuntimeError(f"dataplane sandbox PUT returned no id: {data!r}")
-
-    # Critical: GET-back verify gatewayConnections actually persisted.
-    # Without this, a silent drop on the dataplane side surfaces only as
-    # an opaque 401 on the smoke test later.
-    _, get_out, _ = _az_rest("GET", f"{base}/{sid}", resource=DATAPLANE_RESOURCE)
-    try:
-        sb = json.loads(get_out) if get_out else {}
-    except json.JSONDecodeError:
-        sb = {}
-    gc = sb.get("gatewayConnections") or (sb.get("properties") or {}).get("gatewayConnections") or []
-    want = connection_resource_id.lower()
-    matched = None
-    if isinstance(gc, list):
-        for e in gc:
-            if isinstance(e, dict) and isinstance(e.get("resourceId"), str) and e["resourceId"].lower() == want:
-                matched = e
-                break
-    if matched is None:
-        raise RuntimeError(
-            "dataplane PUT accepted but gatewayConnections[] is NOT on the sandbox "
-            f"after read-back. This is why the platform proxy would return 401 — "
-            f"without a per-sandbox gatewayConnections entry the proxy has no MI "
-            f"to fetch a token for. Sandbox GET response: {get_out[:2000]!r}"
-        )
-    auth_t = (matched.get("authentication") or {}).get("type") or ""
-    runtime_back = matched.get("connectionRuntimeUrl") or ""
-    print(f"    gatewayConnections[] present on sandbox (auth={auth_t}, runtime={runtime_back})")
     return sid
 
 
@@ -737,10 +684,9 @@ def main() -> int:
               f"(runtime URL {runtime_host} mediated by platform)...")
         _apply_egress(endpoint, sub, rg, sg, sid)
 
-        print(f"==> Gateway-connection auth-injection smoke test "
-              f"(GET {runtime_host}/v2/Mail?top=1)...")
-        _smoke_test_gateway_auth_injection(sandbox, runtime_url)
-        print("    smoke test ok — platform injected auth, runtime URL returned 200")
+        print(f"==> Egress smoke test: GET {runtime_host}/v2/Mail?folderPath=Inbox&top=1...")
+        _smoke_test_egress(sandbox, runtime_url)
+        print("    egress ok — runtime URL reachable + platform auth-injection working")
 
         print("==> Verifying Copilot CLI auth (token round-trip)...")
         _verify_copilot_token(sandbox, copilot_token)

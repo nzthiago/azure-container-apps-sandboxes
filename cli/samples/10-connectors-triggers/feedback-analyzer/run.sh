@@ -271,27 +271,23 @@ fi
 # ----- 1. Sandbox --------------------------------------------------------
 # Dataplane PUT (no sandbox id in URL, no api-version, no apiVersion
 # param — Cascade shape) so we can pass gatewayConnections[]. The
-# per-sandbox entry mirrors the SG-level shape exactly:
-# {resourceId, connectionRuntimeUrl, authentication.type=SystemAssignedManagedIdentity}.
-# With this set on BOTH the SG AND the sandbox at create-time, the
-# platform's connector-gateway-aware egress layer injects Bearer auth
-# automatically on every outbound call to the runtime URL — the
-# sandbox code itself never sees / handles the token.
+# per-sandbox entry contains ONLY {resourceId} — the full details
+# (connectionRuntimeUrl + authentication.type) live on the SG-level
+# gatewayConnections[] entry and are looked up by resourceId at runtime.
+# With this and the SG-level entry in place, the platform's connector-
+# gateway-aware proxy injects Bearer auth automatically on every
+# outbound call to the runtime URL.
 echo "==> Creating sandbox in '$SG' (labels.run=$RUN_ID) with gatewayConnections=[$CONN]..."
 CONNECTION_RESOURCE_ID="/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.Web/connectorGateways/$GW/connections/$CONN"
 SANDBOX_BODY="$(mktmp)"
-"$_PY" - "$CONNECTION_RESOURCE_ID" "$RUNTIME_URL" "$RUN_ID" > "$SANDBOX_BODY" <<'PYEOF'
+"$_PY" - "$CONNECTION_RESOURCE_ID" "$RUN_ID" > "$SANDBOX_BODY" <<'PYEOF'
 import json, sys
-resource_id, runtime_url, run_id = sys.argv[1], sys.argv[2], sys.argv[3]
+resource_id, run_id = sys.argv[1], sys.argv[2]
 print(json.dumps({
     "sourcesRef": {"diskImage": {"name": "copilot", "isPublic": True}},
     "vmmType": "CloudHypervisor",
     "resources": {"cpu": "2000m", "memory": "4096Mi", "disk": "20480Mi"},
-    "gatewayConnections": [{
-        "resourceId": resource_id,
-        "connectionRuntimeUrl": runtime_url,
-        "authentication": {"type": "SystemAssignedManagedIdentity"},
-    }],
+    "gatewayConnections": [{"resourceId": resource_id}],
     "labels": {"sample": "connector-trigger-email", "run": run_id},
 }))
 PYEOF
@@ -315,50 +311,6 @@ PYEOF
 )"
 [[ -n "$SANDBOX_ID" ]] || { echo "error: dataplane sandbox PUT returned no id" >&2; echo "$CREATE_RESP" >&2; exit 1; }
 echo "    sandbox: $SANDBOX_ID"
-
-# Critical post-PUT verification: the dataplane MAY silently drop
-# unknown fields (e.g., if it was provisioned on an API version that
-# doesn't recognise `gatewayConnections`), which would surface later
-# as an opaque 401 on the runtime URL smoke test. Read the sandbox
-# back and assert the wiring landed before we move on.
-echo "==> Verifying gatewayConnections[] landed on the sandbox..."
-SANDBOX_GET="$(az rest --method GET \
-    --url "$SANDBOX_BASE/$SANDBOX_ID" \
-    --resource "$DATAPLANE_RESOURCE")"
-gc_check="$("$_PY" - "$SANDBOX_GET" "$CONNECTION_RESOURCE_ID" <<'PYEOF'
-import json, sys
-try:
-    data = json.loads(sys.argv[1] or "{}")
-except json.JSONDecodeError:
-    print("FAIL:invalid-json"); sys.exit(0)
-want = sys.argv[2].lower()
-gc = data.get("gatewayConnections") or (data.get("properties") or {}).get("gatewayConnections") or []
-if not isinstance(gc, list) or not gc:
-    print("FAIL:missing"); sys.exit(0)
-match = None
-for e in gc:
-    if isinstance(e, dict) and isinstance(e.get("resourceId"), str) and e["resourceId"].lower() == want:
-        match = e; break
-if not match:
-    print("FAIL:no-match"); sys.exit(0)
-auth_type = (match.get("authentication") or {}).get("type") or ""
-runtime = match.get("connectionRuntimeUrl") or ""
-print(f"OK:{auth_type}:{runtime}")
-PYEOF
-)"
-case "$gc_check" in
-    OK:*)
-        echo "    gatewayConnections[] present on sandbox (${gc_check#OK:})" ;;
-    *)
-        echo "error: dataplane PUT accepted but gatewayConnections[] is NOT on the sandbox after read-back." >&2
-        echo "       Reason: ${gc_check#FAIL:}" >&2
-        echo "       This is why the platform proxy returns 401 — without a per-sandbox" >&2
-        echo "       gatewayConnections entry the proxy has no MI to fetch a token for." >&2
-        echo "       The dataplane likely silently stripped the field (API version mismatch?)." >&2
-        echo "       Sandbox GET response (truncated to first 2000 chars):" >&2
-        echo "${SANDBOX_GET:0:2000}" >&2
-        exit 1 ;;
-esac
 
 # ----- 2. Verify copilot CLI is present (the disk image ships it) -------
 echo "==> Verifying copilot CLI is present..."
@@ -423,17 +375,12 @@ aca sandbox exec --group "$SG" --id "$SANDBOX_ID" -c "rm -f /app/launch.sh" \
     >/dev/null 2>&1 || true
 echo "    listener is up"
 
-# ----- 4. Egress policy --------------------------------------------------
-# Lock down outbound traffic to a default-Deny + allowlist for GitHub
-# Copilot CLI hosts. The Office 365 connection runtime URL host
-# (RUNTIME_HOST) is intentionally NOT in the host-Allow list — the
-# platform's gatewayConnections-aware proxy mediates calls to it
-# independently of the egress policy (because the sandbox carries
-# gatewayConnections[] in its spec, the proxy recognises the destination
-# and forwards via the gateway path). The same proxy ALSO injects
-# Bearer auth on that path, so no per-sandbox Transform rule is needed
-# either. Verified live: Deny + no runtime-host allow + no Transform
-# still returns HTTP 200 for the connection runtime URL.
+# ----- 4. Egress: Deny + GitHub host-Allow -------------------------------
+# Connection runtime URL host (RUNTIME_HOST) is NOT in the host-Allow
+# list because the platform's gatewayConnections-aware proxy mediates
+# calls to it independently of the egress policy AND injects Bearer
+# auth on the platform path. Verified live: Deny + no runtime allow +
+# no Transform still returns HTTP 200 for the connection runtime URL.
 echo "==> Locking down egress: Deny + GitHub host-allows (runtime URL $RUNTIME_HOST mediated by platform)..."
 EGRESS_BODY="$(mktmp)"
 cat > "$EGRESS_BODY" <<EOF
@@ -457,25 +404,7 @@ az rest --method POST \
     --body "@$(to_native "$EGRESS_BODY")" \
     >/dev/null
 
-# ----- 5. Gateway-connection auth-injection smoke test -------------------
-# This is the end-to-end proof that the wiring is correct. It mirrors
-# what the in-sandbox listener (server.py) will do when it later POSTs
-# replies back to /v2/Mail (SendMailV2):
-#
-#   * Inside the sandbox we run `curl $RUNTIME_URL/v2/Mail?folderPath=Inbox&top=1`
-#     with NO Authorization header.
-#   * The platform proxy sees the destination matches a sandbox
-#     `gatewayConnections[]` entry, looks up the SG-level entry by
-#     resourceId, fetches a Bearer token using the sandbox-group MI
-#     (via the connection's send-side access policy), and forwards
-#     the request to Office 365 with that token attached.
-#   * O365 returns 200 with the top-1 inbox messages JSON.
-#
-# A non-200 response means the auth-injection chain is broken. The
-# preflight (cc_preflight) catches most causes pre-flight; this check
-# is the final live confirmation that the per-sandbox PUT actually
-# applied gatewayConnections AND the platform recognises it.
-echo "==> Gateway-connection auth-injection smoke test (GET $RUNTIME_HOST/v2/Mail?top=1)..."
+echo "==> Egress smoke test: GET $RUNTIME_HOST/v2/Mail?folderPath=Inbox&top=1..."
 TEST_URL="$RUNTIME_URL/v2/Mail?folderPath=Inbox&top=1"
 ok=0
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18; do
@@ -485,19 +414,14 @@ for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18; do
     if [[ "$code" == "200" ]]; then ok=1; break; fi
     sleep 5
 done
-[[ "$ok" == "1" ]] || { echo "error: gateway-connection auth-injection smoke test failed (last http_code=${code:-?})." >&2; \
-    echo "       The platform proxy did NOT inject a Bearer token on the call to" >&2; \
-    echo "       $RUNTIME_HOST. Wiring is broken in one of these places:" >&2; \
-    echo "         (a) sandbox-acl missing/stale on connection $CONN" >&2; \
-    echo "             (preflight should have caught — re-run setup.sh)" >&2; \
-    echo "         (b) sandbox-group '$SG' has no SystemAssigned MI or its" >&2; \
-    echo "             gatewayConnections[] entry doesn't match this connection" >&2; \
-    echo "             (preflight should have caught — re-run setup.sh)" >&2; \
-    echo "         (c) THIS sandbox was created without gatewayConnections[] in" >&2; \
-    echo "             its spec (post-PUT verification above should have caught)" >&2; \
-    echo "         (d) connection OAuth credential expired — re-run azd provision" >&2; \
+[[ "$ok" == "1" ]] || { echo "error: egress smoke test failed (last http_code=${code:-?})." >&2; \
+    echo "       Check: (a) sandbox-acl exists on the connection, (b) the sandbox" >&2; \
+    echo "       group has a SystemAssigned MI and a gatewayConnections[] entry" >&2; \
+    echo "       referencing this connection (set by setup.sh), (c) this sandbox" >&2; \
+    echo "       was created with the same connection in its gatewayConnections" >&2; \
+    echo "       list (handled by this script)." >&2; \
     exit 1; }
-echo "    smoke test ok — platform injected auth, runtime URL returned 200"
+echo "    egress ok — runtime URL reachable + platform auth-injection working"
 
 # ----- 5. Verify Copilot CLI auth (token round-trip) --------------------
 echo "==> Verifying Copilot CLI auth (one-shot 'ready' probe)..."
