@@ -312,6 +312,24 @@ PYEOF
 [[ -n "$SANDBOX_ID" ]] || { echo "error: dataplane sandbox PUT returned no id" >&2; echo "$CREATE_RESP" >&2; exit 1; }
 echo "    sandbox: $SANDBOX_ID"
 
+# The dataplane PUT returns the sandbox id immediately, but for a short
+# window (seconds to ~30s) follow-up dataplane calls — including
+# `aca sandbox exec` — can race ahead of provisioning and get
+# `SandboxNotFound (404)` from the regional dataplane router. Poll
+# `aca sandbox get` (a low-cost dataplane GET) until it succeeds, then
+# continue with exec/fs-write. This is purely a propagation/readiness
+# wait — once one GET succeeds, follow-up calls are reliable.
+echo "==> Waiting for sandbox to be queryable on the dataplane..."
+ready=0
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
+    if aca sandbox get --group "$SG" --id "$SANDBOX_ID" >/dev/null 2>&1; then
+        ready=1; break
+    fi
+    sleep 2
+done
+[[ "$ready" == "1" ]] || { echo "error: sandbox $SANDBOX_ID never became queryable after 60s" >&2; exit 1; }
+echo "    sandbox is queryable"
+
 # ----- 2. Verify copilot CLI is present (the disk image ships it) -------
 echo "==> Verifying copilot CLI is present..."
 aca sandbox exec --group "$SG" --id "$SANDBOX_ID" -c \

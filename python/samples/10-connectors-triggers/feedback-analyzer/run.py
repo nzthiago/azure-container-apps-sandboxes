@@ -628,6 +628,29 @@ def main() -> int:
         print(f"    sandbox: {sid}")
         sandbox = client.get_sandbox_client(sid)
 
+        # The dataplane PUT returns the sandbox id immediately, but for a
+        # short window (seconds to ~30s) follow-up dataplane calls — including
+        # `sandbox.exec()` — can race ahead of provisioning and get
+        # SandboxNotFound (404) from the regional dataplane router. Poll the
+        # cheap `client.get_sandbox(sid)` (a dataplane GET) until it succeeds,
+        # then continue with exec / write_file. This is purely a propagation /
+        # readiness wait — once one GET succeeds, follow-up calls are reliable.
+        print("==> Waiting for sandbox to be queryable on the dataplane...")
+        deadline = time.monotonic() + 60
+        last_err: Exception | None = None
+        while time.monotonic() < deadline:
+            try:
+                client.get_sandbox(sid)
+                break
+            except Exception as exc:  # noqa: BLE001
+                last_err = exc
+                time.sleep(2)
+        else:
+            raise RuntimeError(
+                f"sandbox {sid} never became queryable after 60s: {last_err!r}"
+            )
+        print("    sandbox is queryable")
+
         # The copilot disk image ships python3 + the github copilot CLI
         # pre-installed at /usr/local/bin/copilot; nothing to install.
         print("==> Verifying copilot CLI is present...")
