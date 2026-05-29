@@ -95,7 +95,7 @@ azd down --purge --force
                        │   polled every 10s
                        ▼
  ┌─────────────────────────────────────────────────────────────────┐
- │  Connector Namespace  (westcentralu                             │
+ │  Connector Namespace  (westcentralus)                           │
  │  ├─ sharepointonline connection  (OAuth → your SP site)         │
  │  ├─ workiqsharepoint connection  (OAuth → your SP site, MCP)    │
  │  ├─ mcpserverConfig (kind=ManagedMcpServer, workiqsharepoint)   │
@@ -254,19 +254,6 @@ registration, and re-PUTs the trigger config.
 
 ---
 
-## Why a sandbox (and not a Function App)
-
-| | Azure Functions | This sandbox |
-|---|---|---|
-| `apt install poppler-utils tesseract-ocr` per request | painful (custom container, slow cold start) | one-line in `bootstrap.sh` |
-| Let the LLM **write and execute fresh Python** per document | RCE against the Function host | the point — per-event sandbox isolation |
-| Parse a possibly-malicious PDF (CVE exposure) | shared blast radius | one ACA Sandbox, neighbors unaffected |
-| Memory-hungry OCR on multi-page scans | tight consumption limits | per-VM CPU/RAM |
-| Deny-default egress per invocation | not really | yes — extracted data goes only where we allow |
-| **The webhook target itself** | needs the Function App to host the receiver | the sandbox **is** the webhook target |
-
----
-
 ## Going further: per-file child sandboxes
 
 The shipped design uses one long-lived host sandbox that serializes
@@ -284,17 +271,3 @@ not yet confirmed. When that lands, the listener becomes a tiny
 dispatcher and the GitHub PAT trade-off goes away too (each child
 sandbox gets its own egress policy that injects the PAT inline at
 the boundary).
-
----
-
-## Related
-
-- [Scenario 10 — connectors-email-triage](../10-connectors-email-triage/README.md)
-  — same namespace + sandbox primitives, but with an **ACA receiver
-  in the middle** and Teams MCP as the output sink. Read 10 first
-  for the receiver-mediated pattern; this scenario is the
-  no-receiver evolution.
-- [Microsoft Functions reference sample
-  (functions-connectors-net-builtinauth)](https://github.com/Azure-Samples/functions-connectors-net-builtinauth)
-  — the closest Functions-based comparable. Useful to compare the
-  security model and developer experience.
