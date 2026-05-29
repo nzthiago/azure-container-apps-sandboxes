@@ -75,6 +75,8 @@ Step-through notebooks that run the Python SDK end-to-end. Open in VS Code and *
 | 07 | computer-use | LLM computer-use agent (Azure OpenAI `computer-use-preview` / gpt-5.4) driving Chrome inside a sandbox to fill out a form or any web task; watch live via noVNC. Built on the OpenAI Agents SDK (`AsyncComputer` + `ComputerTool`). | — | — | 🔜 coming soon |
 | 08 | sandbox-agents | Agent frameworks (OpenAI Agents SDK, Claude Managed Agents, LangChain Deep Agents) using ACA sandboxes as their tool-execution backend. OpenAI ships a **first-class provider package** (`agents_aca_sandboxes`) plus a live Deep Research demo and a platform-architecture brief. | — | — | 🔜 coming soon |
 | 09 | mcp-hosting | Host MCP servers in a sandbox — `excalidraw-anonymous` (public via `add_port`) and `dab-sql-devtunnel` (DAB + Postgres + Chinook, exposed via Dev Tunnels with **no inbound port** on the sandbox) | — | — | 🔜 coming soon |
+| 10 | connectors-email-triage | **Connector Namespaces + ACA Sandbox**: Outlook `When a new email arrives (V3)` trigger → ACA receiver → per-email sandbox → GitHub Copilot CLI → Teams MCP (Work IQ) posts a triage card. End-to-end `azd up`, deny-default egress + Transform-rule API-key stamping. | — | [Python](python/samples/10-connectors-email-triage) | ✅ ready |
+| 11 | connectors-document-automation | **ACA Sandbox as direct webhook target** for a Connector Namespaces SharePoint trigger. No receiver, no Function host. Sandbox runs FastAPI on :8080, Copilot CLI uses Work IQ SharePoint MCP + `pdftotext`/`tesseract` to extract invoice data and upload results back to SharePoint. End-to-end `azd up`. | — | [Python](python/samples/11-connectors-document-automation) | ✅ ready |
 
 ## Reference
 
