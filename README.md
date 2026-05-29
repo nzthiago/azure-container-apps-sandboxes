@@ -52,24 +52,14 @@ documentation and how to override defaults.
 
 ## Samples
 
-### Get Started with API essentials
+### Labs — guided Jupyter notebooks (Python SDK)
 
-| # | Guide | What it shows | CLI | Python | Status |
-|---|---|---|---|---|---|
-| 00 | sandbox-groups | Create group, assign role, run sandbox, delete group | [CLI](cli/samples/00-get-started/00-sandbox-groups) | [Python](python/samples/00-get-started/00-sandbox-groups) | ✅ ready |
-| 01 | sandboxes | Basic + advanced + parallel (asyncio) + YAML apply, all in one script | [CLI](cli/samples/00-get-started/01-sandboxes) | [Python](python/samples/00-get-started/01-sandboxes) | ✅ ready |
-| 02 | snapshots | `create_snapshot`, restore into new sandbox | [CLI](cli/samples/00-get-started/02-snapshots) | [Python](python/samples/00-get-started/02-snapshots) | ✅ ready |
-| 03 | disks | Build from container image **and** commit running sandbox to a disk (combined) | [CLI](cli/samples/00-get-started/03-disks) | [Python](python/samples/00-get-started/03-disks) | ✅ ready |
-| 04 | volumes | AzureBlob shared mounts across sandboxes | [CLI](cli/samples/00-get-started/04-volumes) | [Python](python/samples/00-get-started/04-volumes) | ✅ ready |
-| 05 | lifecycle | stop / resume + AutoSuspendPolicy + AutoDeletePolicy | [CLI](cli/samples/00-get-started/05-lifecycle) | [Python](python/samples/00-get-started/05-lifecycle) | ✅ ready |
-| 06 | ports | `add_port(anonymous=True)`, hit public URL | [CLI](cli/samples/00-get-started/06-ports) | [Python](python/samples/00-get-started/06-ports) | ✅ ready |
-| 07 | files | write / read / stat / list / mkdir / delete | [CLI](cli/samples/00-get-started/07-files) | [Python](python/samples/00-get-started/07-files) | ✅ ready |
-| 08 | egress | `set_egress_default("Deny")` + host allow rules | [CLI](cli/samples/00-get-started/08-egress) | [Python](python/samples/00-get-started/08-egress) | ✅ ready |
-| 09 | secrets | upsert / peek / list / delete (group-scoped) | [CLI](cli/samples/00-get-started/09-secrets) | [Python](python/samples/00-get-started/09-secrets) | ✅ ready |
-| 10 | identity | Group identity (SystemAssigned / UserAssigned managed identity today; extensible) | [CLI](cli/samples/00-get-started/10-identity) | [Python](python/samples/00-get-started/10-identity) | ✅ ready |
-| 11 | labels | `labels=` on create + `list_sandboxes(labels=…)` | [CLI](cli/samples/00-get-started/11-labels) | [Python](python/samples/00-get-started/11-labels) | ✅ ready |
-| 12 | interactive-shell | `aca sandbox shell` — interactive PTY session (CLI only) | [CLI](cli/samples/00-get-started/12-interactive-shell) | — | ✅ ready |
+Interactive, run-all notebooks that walk the full sandbox surface step-by-step:
 
+| # | Lab | What it covers |
+|---|---|---|
+| 01 | [Getting Started](python/labs/01-getting-started.ipynb) | End-to-end lifecycle: create a sandbox group → sandbox → exec → files → ports → snapshots → disks → volumes → lifecycle policies → egress rules → secrets → cleanup |
+| 02 | [Bring Your Own Container](python/labs/02-bring-your-own-container.ipynb) | Build and run custom container images as sandbox disk images |
 
 ### Scenarios — composed use cases (with production tips)
 
