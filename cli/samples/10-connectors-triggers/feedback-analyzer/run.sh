@@ -206,7 +206,7 @@ to_native() {
 SANDBOX_ID=""
 PORT_ADDED=0
 TRIGGER_CREATED=0
-RUN_ID="$("$_PY" -c 'import uuid;print(uuid.uuid4().hex[:8])')"
+RUN_ID="$("$_PY" -c 'import uuid;print(uuid.uuid4().hex[:8])' | tr -d '\r')"
 
 cleanup() {
     if [[ "$TRIGGER_CREATED" == "1" ]]; then
@@ -297,7 +297,7 @@ CREATE_RESP="$(az rest --method PUT \
     --resource "$DATAPLANE_RESOURCE" \
     --headers "Content-Type=application/json" \
     --body "@$(to_native "$SANDBOX_BODY")")"
-SANDBOX_ID="$("$_PY" - "$CREATE_RESP" <<'PYEOF'
+SANDBOX_ID="$("$_PY" - "$CREATE_RESP" <<'PYEOF' | tr -d '\r'
 import json, sys
 try:
     data = json.loads(sys.argv[1] or "{}")
@@ -313,29 +313,9 @@ PYEOF
 echo "    sandbox: $SANDBOX_ID"
 
 # ----- 2. Verify copilot CLI is present (the disk image ships it) -------
-# The dataplane PUT returns the sandbox id immediately, but for a short
-# window (seconds to ~30s) follow-up `aca sandbox exec` calls can race
-# ahead of provisioning and get `SandboxNotFound (404)` from the regional
-# dataplane router. Retry the first exec on transient failure — once any
-# exec succeeds, follow-up exec / fs-write calls are reliable.
 echo "==> Verifying copilot CLI is present..."
-ready=0
-err_log="$(mktemp)"
-for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25; do
-    if aca sandbox exec --group "$SG" --id "$SANDBOX_ID" -c \
-            "command -v copilot && copilot --version" >/dev/null 2>"$err_log"; then
-        ready=1; break
-    fi
-    if grep -q "SandboxNotFound\|404\|not found" "$err_log" 2>/dev/null; then
-        sleep 4
-        continue
-    fi
-    cat "$err_log" >&2
-    rm -f "$err_log"
-    exit 1
-done
-rm -f "$err_log"
-[[ "$ready" == "1" ]] || { echo "error: sandbox $SANDBOX_ID never became exec-able after 100s" >&2; exit 1; }
+aca sandbox exec --group "$SG" --id "$SANDBOX_ID" -c \
+    "command -v copilot && copilot --version" >/dev/null
 
 # ----- 3. Upload + start -------------------------------------------------
 echo "==> Uploading sandbox-app/server.py into /app..."
@@ -494,7 +474,7 @@ PORT_RESP="$(az rest --method POST \
 PORT_ADDED=1
 # Pass the response as an argv (not stdin) so the heredoc-as-script for `python3 -`
 # doesn't collide with reading the JSON payload.
-PORT_URL="$("$_PY" - "$PORT" "$PORT_RESP" <<'PYEOF'
+PORT_URL="$("$_PY" - "$PORT" "$PORT_RESP" <<'PYEOF' | tr -d '\r'
 import json, sys
 port = int(sys.argv[1])
 data = json.loads(sys.argv[2] or "{}")
