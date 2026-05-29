@@ -88,11 +88,14 @@ set -a; . "$dir/.env"; set +a
 # Strip carriage returns that arrive when .env is CRLF-encoded
 # (common on Windows). Without this, every value ends with \r and ARM
 # URLs / `aca` CLI args silently break.
+# Note: some of these vars are optional (TRIAGE_RECIPIENT, the GH token
+# vars) so we skip ones that aren't set — otherwise `set -u` aborts.
 for _v in AZURE_SUBSCRIPTION_ID ACA_RESOURCE_GROUP ACA_SANDBOX_GROUP \
           ACA_SANDBOXGROUP_REGION ACA_CONNECTOR_GATEWAY \
           ACA_CONNECTOR_CONNECTION ACA_CONNECTOR_GATEWAY_REGION \
           ACA_USER_EMAIL TRIAGE_RECIPIENT \
           COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN; do
+    [[ -n "${!_v+x}" ]] || continue
     eval "$_v=\"\${$_v%\$'\r'}\""
 done
 unset _v
