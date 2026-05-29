@@ -523,7 +523,7 @@ fi
 echo "    sandbox-group MI principalId=$SG_PRINCIPAL_ID"
 
 echo "==> Granting sandbox-group MI access policy on the same connection (send-side)..."
-ensure_acl "sandbox-acl" "$SG_PRINCIPAL_ID"
+cc_ensure_acl_current "sandbox-acl" "$SG_PRINCIPAL_ID" "$TENANT_ID" "$REGION"
 
 # ----- 4c. Fetch connection runtime URL ----------------------------------
 echo "==> Resolving connection runtime URL..."
