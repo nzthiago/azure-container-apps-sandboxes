@@ -106,8 +106,8 @@ def main() -> None:
 
         print(f"==> Uploading app from {APP_DIR.relative_to(SCENARIO_DIR.parent)}...")
         sandbox.exec("mkdir -p /app")
-        sandbox.write_file("/app/server.js", (APP_DIR / "server.js").read_text())
-        sandbox.write_file("/app/package.json", (APP_DIR / "package.json").read_text())
+        sandbox.write_file("/app/server.js", (APP_DIR / "server.js").read_text(encoding="utf-8"))
+        sandbox.write_file("/app/package.json", (APP_DIR / "package.json").read_text(encoding="utf-8"))
 
         print(f"==> Starting Node server on :{PORT}...")
         sandbox.exec(
