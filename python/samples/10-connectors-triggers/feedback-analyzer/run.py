@@ -630,8 +630,38 @@ def main() -> int:
 
         # The copilot disk image ships python3 + the github copilot CLI
         # pre-installed at /usr/local/bin/copilot; nothing to install.
+        #
+        # The dataplane PUT returns the sandbox id right away and the
+        # sandbox is immediately visible to `delete` / the portal, but the
+        # in-VM exec path needs another ~10-30s to come online — the first
+        # `sandbox.exec()` after PUT can 404 with `SandboxNotFound` until
+        # the exec dataplane sees the new id. Retry up to ~120s on that
+        # specific transient; any other error is surfaced immediately.
         print("==> Verifying copilot CLI is present...")
-        r = sandbox.exec("command -v copilot && copilot --version")
+        r = None
+        deadline = time.monotonic() + 120
+        announced = False
+        last_err: Exception | None = None
+        while time.monotonic() < deadline:
+            try:
+                r = sandbox.exec("command -v copilot && copilot --version")
+                break
+            except Exception as exc:  # noqa: BLE001
+                msg = str(exc)
+                if ("SandboxNotFound" in msg or "404" in msg
+                        or "not found" in msg.lower()):
+                    if not announced:
+                        print("    sandbox exec dataplane not ready yet, "
+                              "retrying (up to 120s)...")
+                        announced = True
+                    last_err = exc
+                    time.sleep(4)
+                    continue
+                raise
+        if r is None:
+            raise RuntimeError(
+                f"sandbox {sid} never became exec-able after 120s: {last_err!r}"
+            )
         if r.exit_code != 0:
             sys.exit(
                 "error: copilot CLI not found on the sandbox.\n"

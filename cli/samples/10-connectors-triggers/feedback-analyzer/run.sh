@@ -313,9 +313,37 @@ PYEOF
 echo "    sandbox: $SANDBOX_ID"
 
 # ----- 2. Verify copilot CLI is present (the disk image ships it) -------
+# The dataplane PUT returns the sandbox id right away and the sandbox is
+# immediately visible to `aca sandbox delete` / the portal, but the
+# in-VM exec path needs another ~10-30s to come online — the first
+# `aca sandbox exec` after PUT can 404 with `SandboxNotFound` until the
+# exec dataplane sees the new id. Retry up to ~120s on that specific
+# transient; any other error is surfaced immediately.
 echo "==> Verifying copilot CLI is present..."
-aca sandbox exec --group "$SG" --id "$SANDBOX_ID" -c \
-    "command -v copilot && copilot --version" >/dev/null
+_err="$(mktemp)"
+_ok=0
+for _attempt in $(seq 1 30); do
+    if aca sandbox exec --group "$SG" --id "$SANDBOX_ID" -c \
+            "command -v copilot && copilot --version" >/dev/null 2>"$_err"; then
+        _ok=1
+        break
+    fi
+    if grep -qE 'SandboxNotFound|404|not found' "$_err"; then
+        if (( _attempt == 1 )); then
+            echo "    sandbox exec dataplane not ready yet, retrying (up to 120s)..."
+        fi
+        sleep 4
+        continue
+    fi
+    cat "$_err" >&2
+    rm -f "$_err"
+    exit 1
+done
+rm -f "$_err"
+if (( _ok != 1 )); then
+    echo "error: sandbox $SANDBOX_ID never became exec-able after 120s" >&2
+    exit 1
+fi
 
 # ----- 3. Upload + start -------------------------------------------------
 echo "==> Uploading sandbox-app/server.py into /app..."
