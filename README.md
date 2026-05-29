@@ -65,7 +65,7 @@ Step-through notebooks that run the Python SDK end-to-end. Open in VS Code and *
 ### Scenarios - composed use cases (with production tips)
 
 | # | Scenario | What it will show | CLI | Python |
-|---|---|---|---|---|---|
+|---|---|---|---|---|
 | 01 | webapps | Run a web app in a sandbox; patterns include `simple-anonymous` (open to the internet) and (planned) `authenticated` (Entra-gated) | [CLI](cli/samples/01-webapps) | [Python](python/samples/01-webapps) |
 | 02 | coding-agents | Run **Copilot CLI** in a sandbox with deny-default egress + portal-paste PAT injection (Python + CLI). Claude Code / Codex stubs included. | [CLI](cli/samples/02-coding-agents) | [Python](python/samples/02-coding-agents) |
 | 03 | code-interpreter | LLM-driven code execution - generate, run, observe, iterate | - | [Python](python/samples/03-code-interpreter) |
