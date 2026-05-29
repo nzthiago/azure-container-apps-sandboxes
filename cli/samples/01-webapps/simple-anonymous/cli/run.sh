@@ -116,11 +116,17 @@ for path in "/api/hello" "/api/info"; do
 done
 
 # HTML landing page smoke check.
-html_code="$(curl -s -o /tmp/landing.html -w '%{http_code}' --max-time 10 "$URL/")"
-html_bytes="$(wc -c < /tmp/landing.html | tr -d ' ')"
-if [[ "$html_code" == "200" ]] && grep -q "Hello from a sandbox" /tmp/landing.html; then
+# Use a cwd-relative file so it works on both POSIX and Windows git-bash
+# (where MSYS_NO_PATHCONV=1 above means absolute /tmp paths get passed
+# literally to Windows curl, which cannot resolve them).
+landing_file="./landing-tmp.html"
+html_code="$(curl -s -o "$landing_file" -w '%{http_code}' --max-time 10 "$URL/")"
+html_bytes="$(wc -c < "$landing_file" | tr -d ' ')"
+if [[ "$html_code" == "200" ]] && grep -q "Hello from a sandbox" "$landing_file"; then
     echo "    GET /           -> http 200 (HTML, $html_bytes bytes)"
+    rm -f "$landing_file"
 else
+    rm -f "$landing_file"
     echo "error: landing page check failed (code=$html_code, bytes=$html_bytes)" >&2
     exit 1
 fi
