@@ -64,19 +64,19 @@ Step-through notebooks that run the Python SDK end-to-end. Open in VS Code and *
 
 ### Scenarios - composed use cases (with production tips)
 
-| # | Scenario | What it will show | CLI | Python | Status |
+| # | Scenario | What it will show | CLI | Python |
 |---|---|---|---|---|---|
-| 01 | webapps | Run a web app in a sandbox; patterns include `simple-anonymous` (open to the internet) and (planned) `authenticated` (Entra-gated) | [CLI](cli/samples/01-webapps) | [Python](python/samples/01-webapps) | |
-| 02 | coding-agents | Run **Copilot CLI** in a sandbox with deny-default egress + portal-paste PAT injection (Python + CLI). Claude Code / Codex stubs included. | [CLI](cli/samples/02-coding-agents) | [Python](python/samples/02-coding-agents) | coming soon |
-| 03 | code-interpreter | LLM-driven code execution - generate, run, observe, iterate | - | [Python](python/samples/03-code-interpreter) | coming soon |
-| 04 | swarms | Orchestrator coordinating many sandbox workers - variants 01 (sandbox inception: orchestrator sandbox spawns workers in another group via its group's MI) and 02 (same plus an AzureBlob volume as durable shared scratchpad) ship now | - | [Python](python/samples/04-swarms) | coming soon |
-| 05 | data-processing | Producer/consumer pipelines on shared AzureBlob volumes | - | [Python](python/samples/05-data-processing) | coming soon |
-| 06 | developer-workflows | PR builds, ephemeral CI, on-demand dev environments | - | [Python](python/samples/06-developer-workflows) | coming soon |
-| 07 | computer-use | LLM computer-use agent (Azure OpenAI `computer-use-preview` / gpt-5.4) driving Chrome inside a sandbox to fill out a form or any web task; watch live via noVNC. Built on the OpenAI Agents SDK (`AsyncComputer` + `ComputerTool`). | - | - | coming soon |
-| 08 | sandbox-agents | Agent frameworks (OpenAI Agents SDK, Claude Managed Agents, LangChain Deep Agents) using ACA sandboxes as their tool-execution backend. OpenAI ships a **first-class provider package** (`agents_aca_sandboxes`) plus a live Deep Research demo and a platform-architecture brief. | - | [Python](python/samples/08-sandbox-agents) | coming soon |
-| 09 | mcp-hosting | Host MCP servers in a sandbox - `excalidraw-anonymous` (public via `add_port`) and `dab-sql-devtunnel` (DAB + Postgres + Chinook, exposed via Dev Tunnels with **no inbound port** on the sandbox) | - | [Python](python/samples/09-mcp-hosting) | coming soon |
-| 10 | connectors-email-triage | **Connector Namespaces + ACA Sandbox**: Outlook `When a new email arrives (V3)` trigger → ACA receiver → per-email sandbox → GitHub Copilot CLI → Teams MCP (Work IQ) posts a triage card. End-to-end `azd up`, deny-default egress + Transform-rule API-key stamping. | - | [Python](python/samples/10-connectors-email-triage) | |
-| 11 | connectors-document-automation | **ACA Sandbox as direct webhook target** for a Connector Namespaces SharePoint trigger. No receiver, no Function host. Sandbox runs FastAPI on :8080, Copilot CLI uses Work IQ SharePoint MCP + `pdftotext`/`tesseract` to extract invoice data and upload results back to SharePoint. End-to-end `azd up`. | - | [Python](python/samples/11-connectors-document-automation) | |
+| 01 | webapps | Run a web app in a sandbox; patterns include `simple-anonymous` (open to the internet) and (planned) `authenticated` (Entra-gated) | [CLI](cli/samples/01-webapps) | [Python](python/samples/01-webapps) |
+| 02 | coding-agents | Run **Copilot CLI** in a sandbox with deny-default egress + portal-paste PAT injection (Python + CLI). Claude Code / Codex stubs included. | [CLI](cli/samples/02-coding-agents) | [Python](python/samples/02-coding-agents) |
+| 03 | code-interpreter | LLM-driven code execution - generate, run, observe, iterate | - | [Python](python/samples/03-code-interpreter) |
+| 04 | swarms | Orchestrator coordinating many sandbox workers - variants 01 (sandbox inception: orchestrator sandbox spawns workers in another group via its group's MI) and 02 (same plus an AzureBlob volume as durable shared scratchpad) ship now | - | [Python](python/samples/04-swarms) |
+| 05 | data-processing | Producer/consumer pipelines on shared AzureBlob volumes | - | [Python](python/samples/05-data-processing) |
+| 06 | developer-workflows | PR builds, ephemeral CI, on-demand dev environments | - | [Python](python/samples/06-developer-workflows) |
+| 07 | computer-use | LLM computer-use agent (Azure OpenAI `computer-use-preview` / gpt-5.4) driving Chrome inside a sandbox to fill out a form or any web task; watch live via noVNC. Built on the OpenAI Agents SDK (`AsyncComputer` + `ComputerTool`). | - | - | 
+| 08 | sandbox-agents | Agent frameworks (OpenAI Agents SDK, Claude Managed Agents, LangChain Deep Agents) using ACA sandboxes as their tool-execution backend. OpenAI ships a **first-class provider package** (`agents_aca_sandboxes`) plus a live Deep Research demo and a platform-architecture brief. | - | [Python](python/samples/08-sandbox-agents) | 
+| 09 | mcp-hosting | Host MCP servers in a sandbox - `excalidraw-anonymous` (public via `add_port`) and `dab-sql-devtunnel` (DAB + Postgres + Chinook, exposed via Dev Tunnels with **no inbound port** on the sandbox) | - | [Python](python/samples/09-mcp-hosting) | 
+| 10 | connectors-email-triage | **Connector Namespaces + ACA Sandbox**: Outlook `When a new email arrives (V3)` trigger → ACA receiver → per-email sandbox → GitHub Copilot CLI → Teams MCP (Work IQ) posts a triage card. End-to-end `azd up`, deny-default egress + Transform-rule API-key stamping. | - | [Python](python/samples/10-connectors-email-triage) |
+| 11 | connectors-document-automation | **ACA Sandbox as direct webhook target** for a Connector Namespaces SharePoint trigger. No receiver, no Function host. Sandbox runs FastAPI on :8080, Copilot CLI uses Work IQ SharePoint MCP + `pdftotext`/`tesseract` to extract invoice data and upload results back to SharePoint. End-to-end `azd up`. | - | [Python](python/samples/11-connectors-document-automation) |
 
 ## Reference
 
