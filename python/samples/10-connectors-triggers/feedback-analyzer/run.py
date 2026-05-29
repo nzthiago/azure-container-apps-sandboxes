@@ -628,33 +628,34 @@ def main() -> int:
         print(f"    sandbox: {sid}")
         sandbox = client.get_sandbox_client(sid)
 
+        # The copilot disk image ships python3 + the github copilot CLI
+        # pre-installed at /usr/local/bin/copilot; nothing to install.
+        #
         # The dataplane PUT returns the sandbox id immediately, but for a
-        # short window (seconds to ~30s) follow-up dataplane calls — including
-        # `sandbox.exec()` — can race ahead of provisioning and get
-        # SandboxNotFound (404) from the regional dataplane router. Poll the
-        # cheap `client.get_sandbox(sid)` (a dataplane GET) until it succeeds,
-        # then continue with exec / write_file. This is purely a propagation /
-        # readiness wait — once one GET succeeds, follow-up calls are reliable.
-        print("==> Waiting for sandbox to be queryable on the dataplane...")
-        deadline = time.monotonic() + 60
+        # short window (seconds to ~30s) follow-up `sandbox.exec()` calls
+        # can race ahead of provisioning and get SandboxNotFound (404) from
+        # the regional dataplane router. Retry the first exec on transient
+        # 404 — once any exec succeeds, follow-up exec / write_file calls
+        # are reliable.
+        print("==> Verifying copilot CLI is present...")
+        r = None
+        deadline = time.monotonic() + 100
         last_err: Exception | None = None
         while time.monotonic() < deadline:
             try:
-                client.get_sandbox(sid)
+                r = sandbox.exec("command -v copilot && copilot --version")
                 break
             except Exception as exc:  # noqa: BLE001
-                last_err = exc
-                time.sleep(2)
-        else:
+                msg = str(exc)
+                if "SandboxNotFound" in msg or "404" in msg or "not found" in msg.lower():
+                    last_err = exc
+                    time.sleep(4)
+                    continue
+                raise
+        if r is None:
             raise RuntimeError(
-                f"sandbox {sid} never became queryable after 60s: {last_err!r}"
+                f"sandbox {sid} never became exec-able after 100s: {last_err!r}"
             )
-        print("    sandbox is queryable")
-
-        # The copilot disk image ships python3 + the github copilot CLI
-        # pre-installed at /usr/local/bin/copilot; nothing to install.
-        print("==> Verifying copilot CLI is present...")
-        r = sandbox.exec("command -v copilot && copilot --version")
         if r.exit_code != 0:
             sys.exit(
                 "error: copilot CLI not found on the sandbox.\n"

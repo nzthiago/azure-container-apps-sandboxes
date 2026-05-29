@@ -312,28 +312,30 @@ PYEOF
 [[ -n "$SANDBOX_ID" ]] || { echo "error: dataplane sandbox PUT returned no id" >&2; echo "$CREATE_RESP" >&2; exit 1; }
 echo "    sandbox: $SANDBOX_ID"
 
+# ----- 2. Verify copilot CLI is present (the disk image ships it) -------
 # The dataplane PUT returns the sandbox id immediately, but for a short
-# window (seconds to ~30s) follow-up dataplane calls — including
-# `aca sandbox exec` — can race ahead of provisioning and get
-# `SandboxNotFound (404)` from the regional dataplane router. Poll
-# `aca sandbox get` (a low-cost dataplane GET) until it succeeds, then
-# continue with exec/fs-write. This is purely a propagation/readiness
-# wait — once one GET succeeds, follow-up calls are reliable.
-echo "==> Waiting for sandbox to be queryable on the dataplane..."
+# window (seconds to ~30s) follow-up `aca sandbox exec` calls can race
+# ahead of provisioning and get `SandboxNotFound (404)` from the regional
+# dataplane router. Retry the first exec on transient failure — once any
+# exec succeeds, follow-up exec / fs-write calls are reliable.
+echo "==> Verifying copilot CLI is present..."
 ready=0
-for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
-    if aca sandbox get --group "$SG" --id "$SANDBOX_ID" >/dev/null 2>&1; then
+err_log="$(mktemp)"
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25; do
+    if aca sandbox exec --group "$SG" --id "$SANDBOX_ID" -c \
+            "command -v copilot && copilot --version" >/dev/null 2>"$err_log"; then
         ready=1; break
     fi
-    sleep 2
+    if grep -q "SandboxNotFound\|404\|not found" "$err_log" 2>/dev/null; then
+        sleep 4
+        continue
+    fi
+    cat "$err_log" >&2
+    rm -f "$err_log"
+    exit 1
 done
-[[ "$ready" == "1" ]] || { echo "error: sandbox $SANDBOX_ID never became queryable after 60s" >&2; exit 1; }
-echo "    sandbox is queryable"
-
-# ----- 2. Verify copilot CLI is present (the disk image ships it) -------
-echo "==> Verifying copilot CLI is present..."
-aca sandbox exec --group "$SG" --id "$SANDBOX_ID" -c \
-    "command -v copilot && copilot --version" >/dev/null
+rm -f "$err_log"
+[[ "$ready" == "1" ]] || { echo "error: sandbox $SANDBOX_ID never became exec-able after 100s" >&2; exit 1; }
 
 # ----- 3. Upload + start -------------------------------------------------
 echo "==> Uploading sandbox-app/server.py into /app..."
