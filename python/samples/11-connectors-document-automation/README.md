@@ -1,6 +1,6 @@
 # Automate invoice extraction from SharePoint
 
-Drop an invoice PDF into a SharePoint folder. A sandbox is woken up by a connector, reads the file (with OCR when it's scanned), pulls out the vendor, dates, line items, and totals, and saves the structured data back to SharePoint as JSON next to the original.
+ A finance team gets invoices uploaded to a SharePoint folder all day, and someone has to read each one and type the vendor, dates, line items, and totals into another system. This sample automates the extraction half. Drop a PDF into the folder, a sandbox wakes up, reads the file (with OCR when it's scanned), and saves the structured data back to SharePoint as JSON next to the original. The JSON output is a clean hand-off point for your finance system.
 
 The way it works is a Connector Namespaces trigger watches a SharePoint folder that you configure. When a new file shows up, the trigger calls an existing sandbox directly over HTTPS. Inside the sandbox, GitHub Copilot CLI uses the SharePoint MCP server to download the file, runs tool like `pdftotext` or `tesseract` to get the text, builds a JSON summary of the invoice, and uploads the result through the same MCP server.
 
@@ -9,7 +9,7 @@ The way it works is a Connector Namespaces trigger watches a SharePoint folder t
 
 ## Deploy and test
 
-You'll need [`Azure Developer CLI`](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/install-azd?tabs=winget-windows%2Cbrew-mac%2Cscript-linux&pivots=os-windows), the `az` CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest), the `[GitHub CLI](https://cli.github.com/)`, Python 3.10+, a SharePoint site you can sign in to, and a GitHub account with access to [GitHub Models](https://github.com/marketplace/models).
+You'll need [Azure Developer CLI](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/install-azd?tabs=winget-windows%2Cbrew-mac%2Cscript-linux&pivots=os-windows), [the az CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest), the [GitHub CLI](https://cli.github.com/), Python 3.10+, a SharePoint site you can sign in to, and a GitHub account with access to [GitHub Models](https://github.com/marketplace/models).
 
 ### First Run
 
