@@ -1,11 +1,10 @@
 # Automate invoice extraction from SharePoint
 
- A finance team gets invoices uploaded to a SharePoint folder all day, and someone has to read each one and type the vendor, dates, line items, and totals into another system. This sample automates the extraction half. Drop a PDF into the folder, a sandbox wakes up, reads the file (with OCR when it's scanned), and saves the structured data back to SharePoint as JSON next to the original. The JSON output is a clean hand-off point for your finance system.
+A finance team gets invoices uploaded to a SharePoint folder all day, and someone has to read each one and type the vendor, dates, line items, and totals into another system. This sample automates the extraction half. Drop a PDF into the folder, a sandbox wakes up, reads the file (with OCR when it's scanned), and saves the structured data back to SharePoint as JSON next to the original. The JSON output is a clean hand-off point for your finance system.
 
-The way it works is a Connector Namespaces trigger watches a SharePoint folder that you configure. When a new file shows up, the trigger calls an existing sandbox directly over HTTPS. Inside the sandbox, GitHub Copilot CLI uses the SharePoint MCP server to download the file, runs tool like `pdftotext` or `tesseract` to get the text, builds a JSON summary of the invoice, and uploads the result through the same MCP server.
+The way it works is a Connector Namespaces trigger watches a SharePoint folder that you configure. When a new file shows up, the trigger calls an existing sandbox directly over HTTPS. Inside the sandbox, GitHub Copilot CLI uses the SharePoint MCP server to download the file, runs tools like `pdftotext` or `tesseract` to get the text, builds a JSON summary of the invoice, and uploads the result through the same MCP server.
 
- The sandbox has apt packages and Copilot CLI installed, and is Stopped (zero compute charge) between events, with a transform rule that means the sandbox process never holds the MCP key. This way, you have a programmable Linux box that wakes on an HTTPS event, with a credential-mediating boundary.
-
+The sandbox has apt packages and Copilot CLI installed, and is Stopped (zero compute charge) between events, with a transform rule that means the sandbox process never holds the MCP key. This way, you have a programmable Linux box that wakes on an HTTPS event, with a credential-mediating boundary.
 
 ## Deploy and test
 
@@ -20,7 +19,7 @@ For Mac/Linux:
 azd auth login
 chmod +x infra/scripts/postdeploy.sh
 gh auth refresh -h github.com -s read:user
- azd env set GITHUB_PAT $(gh auth token)
+azd env set GITHUB_PAT $(gh auth token)
 ```
 For Windows/PowerShell:
 
@@ -37,26 +36,33 @@ For the SharePoint location configuration we need two values, both findable from
 
 You can get the **SharePoint site URL** by opening the SharePoint site in any browser. The URL bar shows something like:
 
- https://contoso.sharepoint.com/teams/Finance/Shared Documents/Forms/AllItems.aspx
+```
+https://contoso.sharepoint.com/teams/Finance/Shared Documents/Forms/AllItems.aspx
+```
 
-The site URL is everything up to and including /teams/Finance (or /sites/<name> for non-Teams sites). So:
+The site URL is everything up to and including `/teams/Finance` (or `/sites/<name>` for non-Teams sites). So:
 
- SHAREPOINT_SITE_URL = https://contoso.sharepoint.com/teams/Finance
+```
+SHAREPOINT_SITE_URL = https://contoso.sharepoint.com/teams/Finance
+```
 
-Trim trailing slashes. 
+Trim trailing slashes.
 
-For **SharePoint library ID** this is the list GUID for the document library. In the browser: 
- 1. Open the document library you want (commonly "Documents" / "Shared Documents", or a custom library you created).
- 2. Click the gear ⚙ icon (top right) → Library settings → More library settings.
- 3. Look at the URL bar. It contains ?List=%7B<GUID>%7D. The part between the encoded %7B (which is {) and %7D (which is }) is your library ID.
+For **SharePoint library ID** this is the list GUID for the document library. In the browser:
+
+1. Open the document library you want (commonly "Documents" / "Shared Documents", or a custom library you created).
+2. Click the gear ⚙ icon (top right) → Library settings → More library settings.
+3. Look at the URL bar. It contains `?List=%7B<GUID>%7D`. The part between the encoded `%7B` (which is `{`) and `%7D` (which is `}`) is your library ID.
 
 Example URL:
 
- https://contoso.sharepoint.com/teams/Finance/_layouts/15/listedit.aspx?List=%7BE01BA0E8-6CE5-4B05-A9B7-B4C49BBC6259%7D
+```
+https://contoso.sharepoint.com/teams/Finance/_layouts/15/listedit.aspx?List=%7BE01BA0E8-6CE5-4B05-A9B7-B4C49BBC6259%7D
+```
 
-You can also run the test with input and output subfolders (like /testinvoices/inbound and testinvoites/extracted).
+You can also run the test with input and output subfolders (like `/testinvoices/inbound` and `/testinvoices/extracted`).
 
-The set it up as following including `azd up` to trigger the full deployment:
+Then set it up as follows, including `azd up` to trigger the full deployment:
 
 ```bash
 azd env set SHAREPOINT_SITE_URL     'https://contoso.sharepoint.com/teams/Finance'
@@ -123,6 +129,7 @@ SharePoint MCP (workiqsharepoint via Connector Namespace)
     → readSmallBinaryFile → (shell: pdftotext / tesseract)
     → createSmallTextFile → /<output folder>/<filename>.json
 ```
+
 ## Going further
 
 This scenario uses one long-lived host sandbox that handles requests through Copilot CLI in sequence. For one fresh sandbox per invoice (destroyed after the run completes), the listener would call the sandbox group API to spawn a child sandbox per trigger. That needs in-sandbox managed identity, which isn't yet in this preview but is on the roadmap.
